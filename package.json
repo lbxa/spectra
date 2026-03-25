@@ -1,0 +1,13 @@
+{
+  "name": "component-picker",
+  "private": true,
+  "scripts": {
+    "build": "bunx tsc extension/src/background.ts --target ES2022 --module none --lib ES2022,DOM --types chrome-types --strict --skipLibCheck --ignoreDeprecations 6.0 --outDir extension && bunx tsc extension/src/content.ts --target ES2022 --module none --lib ES2022,DOM --types chrome-types --strict --skipLibCheck --ignoreDeprecations 6.0 --outDir extension && bunx tsc extension/src/popup.ts --target ES2022 --module none --lib ES2022,DOM --types chrome-types --strict --skipLibCheck --ignoreDeprecations 6.0 --outDir extension",
+    "typecheck": "bunx tsc extension/src/background.ts --target ES2022 --module none --lib ES2022,DOM --types chrome-types --strict --skipLibCheck --ignoreDeprecations 6.0 --noEmit && bunx tsc extension/src/content.ts --target ES2022 --module none --lib ES2022,DOM --types chrome-types --strict --skipLibCheck --ignoreDeprecations 6.0 --noEmit && bunx tsc extension/src/popup.ts --target ES2022 --module none --lib ES2022,DOM --types chrome-types --strict --skipLibCheck --ignoreDeprecations 6.0 --noEmit",
+    "dev": "bun run typecheck && bun run typecheck"
+  },
+  "devDependencies": {
+    "chrome-types": "latest",
+    "typescript": "latest"
+  }
+}

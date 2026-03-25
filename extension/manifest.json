@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Component Picker",
+  "description": "Capture visible webpage elements as HTML and screenshot references.",
+  "version": "1.0.0",
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Component Picker",
+    "default_popup": "popup.html"
+  }
+}
