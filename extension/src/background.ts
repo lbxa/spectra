@@ -131,7 +131,9 @@ async function handleSaveComponent(
   validatePayload(payload);
 
   const windowId = sender?.tab?.windowId;
-  const screenshotDataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "png" });
+  const screenshotDataUrl = typeof windowId === "number"
+    ? await chrome.tabs.captureVisibleTab(windowId, { format: "png" })
+    : await chrome.tabs.captureVisibleTab({ format: "png" });
   const croppedDataUrl = await cropScreenshotToBounds(
     screenshotDataUrl,
     payload.bounds,

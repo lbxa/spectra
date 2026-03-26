@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Spectra",
+  "version": "1.0.0",
+  "description": "Capture visible UI elements as reusable HTML and screenshot references.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Spectra"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "host_permissions": ["http://*/*", "https://*/*"]
+}

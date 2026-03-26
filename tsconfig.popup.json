@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowSyntheticDefaultImports": true,
+    "outDir": ".tmp/popup",
+    "paths": {
+      "@/*": ["./extension/src/*"]
+    },
+    "types": ["chrome", "vite/client"]
+  },
+  "include": [
+    "extension/src/popup.tsx",
+    "extension/src/popup/**/*.ts",
+    "extension/src/popup/**/*.tsx",
+    "extension/src/components/**/*.ts",
+    "extension/src/components/**/*.tsx",
+    "extension/src/lib/**/*.ts"
+  ]
+}

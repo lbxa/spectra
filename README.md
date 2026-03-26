@@ -1,4 +1,4 @@
-# Component Picker
+# Spectra
 
 Chrome Extension (Manifest V3) for capturing visible UI elements as reusable references:
 
