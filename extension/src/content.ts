@@ -1,3 +1,4 @@
+(() => {
 type Bounds = {
   left: number;
   top: number;
@@ -588,3 +589,4 @@ function getCaptureFailureMessage(error: unknown): string {
   }
   return "Capture failed.";
 }
+})();
