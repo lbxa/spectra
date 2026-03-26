@@ -2,11 +2,12 @@ type DevMessageListener = (message: unknown) => void;
 
 const DEV_STORAGE_KEY = "__spectra_dev_chrome_storage__";
 
-export function installPopupDevChromeShimIfNeeded(): void {
+export function installPopupDevChromeShimIfNeeded(): boolean {
   if (hasExtensionPopupApis()) {
-    return;
+    return false;
   }
   installPopupDevChromeShim();
+  return true;
 }
 
 function hasExtensionPopupApis(): boolean {

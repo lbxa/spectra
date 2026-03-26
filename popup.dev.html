@@ -4,6 +4,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Spectra Popup Dev</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        min-height: 100%;
+      }
+
+      body {
+        display: grid;
+        place-items: start center;
+        background: #f1f5f9;
+      }
+
+      #root {
+        width: min(800px, 100vw);
+        height: min(600px, 100vh);
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

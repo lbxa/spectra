@@ -1,22 +1,20 @@
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/utils";
 import type { Collection } from "@/lib/library/types";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CollectionCard } from "./CollectionCard";
 
 type CollectionRailProps = {
   collections: Collection[];
   selectedCollectionId: string | null;
   componentCounts: Record<string, number>;
   onSelectCollection: (collectionId: string) => void;
+  onDeleteCollection: (collectionId: string) => void;
   onCreateCollection: (input: { name: string; description?: string }) => Promise<void>;
   onUpdateCollection: (
     collectionId: string,
     patch: Partial<Pick<Collection, "name" | "description">>
   ) => Promise<void>;
-  onDeleteCollection: (collectionId: string) => void;
 };
 
 export function CollectionRail({
@@ -24,16 +22,16 @@ export function CollectionRail({
   selectedCollectionId,
   componentCounts,
   onSelectCollection,
+  onDeleteCollection,
   onCreateCollection,
-  onUpdateCollection,
-  onDeleteCollection
+  onUpdateCollection
 }: CollectionRailProps) {
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newCollectionDescription, setNewCollectionDescription] = useState("");
   const [draftsById, setDraftsById] = useState<Record<string, { name: string; description: string }>>({});
   const [isCreateFormVisible, setIsCreateFormVisible] = useState(false);
-  const [pendingDeleteCollectionId, setPendingDeleteCollectionId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [pendingRenameCollectionId, setPendingRenameCollectionId] = useState<string | null>(null);
   const saveTimeoutByIdRef = useRef<Record<string, number>>({});
 
   const normalizedCollections = useMemo(
@@ -105,16 +103,16 @@ export function CollectionRail({
   };
 
   return (
-    <aside className="flex h-full min-h-0 w-[220px] min-w-[220px] flex-col border-r border-slate-200 bg-slate-50/70 p-3">
-      <div className="mb-3 flex items-center justify-between gap-2">
+    <aside className="flex h-full min-h-0 w-[220px] min-w-[220px] flex-col border-r border-border bg-surface/80 p-1">
+      <div className="mb-1.5 flex items-center justify-between gap-1">
         <div className="min-w-0">
-          <h2 className="truncate text-xs font-semibold tracking-[0.08em] text-slate-600 uppercase">Library</h2>
-          <p className="truncate text-[11px] text-slate-500">{collections.length} collections</p>
+          <h2 className="truncate text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Library</h2>
+          <p className="truncate text-[11px] text-muted-foreground">{collections.length} collections</p>
         </div>
       </div>
 
       {isCreateFormVisible ? (
-        <div className="mb-3 grid gap-1.5 rounded-md border border-slate-200 bg-white p-2">
+        <div className="mb-1.5 grid gap-1 rounded-md border border-border bg-background p-1">
           <input
             value={newCollectionName}
             onChange={(event) => {
@@ -126,7 +124,7 @@ export function CollectionRail({
                 void handleCreate();
               }
             }}
-            className="h-7 rounded-md border border-transparent px-2 text-[12px] font-medium text-slate-900 outline-none transition-colors hover:cursor-text hover:border-slate-300 focus-visible:border-slate-400"
+            className="h-6 rounded-md border border-transparent px-1.5 text-[12px] font-medium text-foreground outline-none transition-colors hover:cursor-text hover:border-border-strong focus-visible:border-secondary"
             placeholder="New collection name"
             autoFocus
           />
@@ -141,14 +139,14 @@ export function CollectionRail({
                 void handleCreate();
               }
             }}
-            className="h-7 rounded-md border border-transparent px-2 text-[11px] text-slate-600 outline-none transition-colors hover:cursor-text hover:border-slate-300 focus-visible:border-slate-400"
+            className="h-6 rounded-md border border-transparent px-1.5 text-[11px] text-muted-foreground outline-none transition-colors hover:cursor-text hover:border-border-strong focus-visible:border-secondary"
             placeholder="Description (optional)"
           />
-          <div className="flex gap-1.5">
+          <div className="flex gap-1">
             <Button
               type="button"
               size="sm"
-              className="flex-1"
+              className="h-7 flex-1 px-2 text-[11px]"
               disabled={!newCollectionName.trim() || isCreating}
               onClick={() => void handleCreate()}
             >
@@ -158,7 +156,7 @@ export function CollectionRail({
               type="button"
               size="sm"
               variant="outline"
-              className="flex-1"
+              className="h-7 flex-1 px-2 text-[11px]"
               onClick={() => {
                 setIsCreateFormVisible(false);
                 setNewCollectionName("");
@@ -173,7 +171,7 @@ export function CollectionRail({
         <Button
           type="button"
           size="sm"
-          className="mb-3 w-full"
+          className="mb-1.5 h-7 w-full px-2 text-[11px]"
           onClick={() => {
             setIsCreateFormVisible(true);
           }}
@@ -183,7 +181,7 @@ export function CollectionRail({
       )}
 
       <ScrollArea className="min-h-0 flex-1">
-        <ul className="grid w-full gap-1.5">
+        <ul className="grid w-full gap-1">
           {collections.map((collection) => {
             const isSelected = collection.id === selectedCollectionId;
             const count = componentCounts[collection.id] ?? 0;
@@ -192,129 +190,52 @@ export function CollectionRail({
               description: collection.description
             };
             return (
-              <li key={collection.id} className="group w-full">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectCollection(collection.id);
-                  }}
-                  className={cn(
-                    "flex w-full items-start justify-between gap-2 rounded-md border px-2 py-2 text-left transition-colors",
-                    isSelected
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-200 bg-white text-slate-800 hover:bg-slate-100"
-                  )}
-                >
-                  <span className="grid min-w-0 flex-1 gap-1">
-                    <input
-                      value={draft.name}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                      }}
-                      onChange={(event) => {
-                        const nextName = event.target.value;
-                        setDraftsById((current) => ({
-                          ...current,
-                          [collection.id]: {
-                            ...current[collection.id],
-                            name: nextName
-                          }
-                        }));
-                        scheduleSave(collection.id);
-                      }}
-                      onBlur={() => {
-                        void flushSave(collection.id);
-                      }}
-                      className={cn(
-                        "h-6 rounded-md border border-transparent px-1.5 text-[12px] font-medium outline-none transition-colors hover:cursor-text hover:border-slate-300 focus-visible:border-slate-400",
-                        isSelected ? "text-white placeholder:text-slate-300" : "text-slate-900"
-                      )}
-                    />
-                    <input
-                      value={draft.description}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                      }}
-                      onChange={(event) => {
-                        const nextDescription = event.target.value;
-                        setDraftsById((current) => ({
-                          ...current,
-                          [collection.id]: {
-                            ...current[collection.id],
-                            description: nextDescription
-                          }
-                        }));
-                        scheduleSave(collection.id);
-                      }}
-                      onBlur={() => {
-                        void flushSave(collection.id);
-                      }}
-                      className={cn(
-                        "h-6 rounded-md border border-transparent px-1.5 text-[10px] outline-none transition-colors hover:cursor-text hover:border-slate-300 focus-visible:border-slate-400",
-                        isSelected ? "text-slate-300 placeholder:text-slate-300" : "text-slate-500"
-                      )}
-                      placeholder="No description"
-                    />
-                  </span>
-                  <Badge
-                    className={cn(
-                      "shrink-0 rounded-md border-transparent px-1.5 py-0 text-[10px]",
-                      isSelected ? "bg-slate-800 text-slate-100" : "bg-slate-200 text-slate-700"
-                    )}
-                  >
-                    {count}
-                  </Badge>
-                </button>
-                <div className="mt-1 flex w-full justify-end gap-1 opacity-90 transition-opacity group-hover:opacity-100">
-                  <Popover
-                    open={pendingDeleteCollectionId === collection.id}
-                    onOpenChange={(open) => {
-                      setPendingDeleteCollectionId(open ? collection.id : null);
-                    }}
-                  >
-                    <PopoverTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-6 px-2 text-[10px]"
-                        disabled={collection.isSystem}
-                      >
-                        Delete
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="end" className="w-56">
-                      <p className="mb-2 text-[11px] text-slate-700">
-                        Delete <span className="font-semibold">{collection.name}</span>? Components move to Inbox.
-                      </p>
-                      <div className="flex gap-1.5">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() => {
-                            setPendingDeleteCollectionId(null);
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="flex-1 bg-red-600 text-white hover:bg-red-700"
-                          onClick={() => {
-                            setPendingDeleteCollectionId(null);
-                            onDeleteCollection(collection.id);
-                          }}
-                        >
-                          Confirm
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </li>
+              <CollectionCard
+                key={collection.id}
+                collection={collection}
+                isSelected={isSelected}
+                count={count}
+                draft={draft}
+                onSelect={() => {
+                  onSelectCollection(collection.id);
+                }}
+                onRequestRename={() => {
+                  onSelectCollection(collection.id);
+                  setPendingRenameCollectionId(collection.id);
+                }}
+                onDelete={() => {
+                  onDeleteCollection(collection.id);
+                }}
+                shouldFocusNameInput={pendingRenameCollectionId === collection.id}
+                onNameFocusHandled={() => {
+                  if (pendingRenameCollectionId === collection.id) {
+                    setPendingRenameCollectionId(null);
+                  }
+                }}
+                onChangeName={(name) => {
+                  setDraftsById((current) => ({
+                    ...current,
+                    [collection.id]: {
+                      ...current[collection.id],
+                      name
+                    }
+                  }));
+                  scheduleSave(collection.id);
+                }}
+                onChangeDescription={(description) => {
+                  setDraftsById((current) => ({
+                    ...current,
+                    [collection.id]: {
+                      ...current[collection.id],
+                      description
+                    }
+                  }));
+                  scheduleSave(collection.id);
+                }}
+                onBlurDraft={() => {
+                  void flushSave(collection.id);
+                }}
+              />
             );
           })}
         </ul>

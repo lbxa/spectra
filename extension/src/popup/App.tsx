@@ -1,6 +1,4 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { isLibraryUpdatedMessage, type LibraryUpdatedMessage } from "@/lib/library/messages";
 import { libraryRepository } from "@/lib/library/repository";
 import type { Collection, SavedComponent } from "@/lib/library/types";
@@ -70,7 +68,7 @@ export function App() {
         isLoading: false
       });
       await setSelectedCollectionPreference(selectedCollectionId);
-      setStatusMessage(`${countComponents(componentsByCollectionId)} saved component(s).`);
+      setStatusMessage(`${countComponents(componentsByCollectionId)} saved component(s)`);
     };
 
     void loadLibraryState();
@@ -105,7 +103,7 @@ export function App() {
         }
         setIsCaptureAvailable(supported);
         if (!supported) {
-          setStatusMessage("Capture is unavailable on this page. Open an http(s) page.");
+          setStatusMessage("Capture is unavailable on this page. Open an http(s) page");
         }
       } catch (error) {
         console.error("Failed to check active tab before capture:", error);
@@ -134,11 +132,11 @@ export function App() {
 
   const handleCaptureStart = async (): Promise<void> => {
     setIsCaptureStarting(true);
-    setStatusMessage("Starting capture...");
+    setStatusMessage("Starting capture");
 
     try {
       await startCapture();
-      setStatusMessage("Capture mode enabled on the active tab.");
+      setStatusMessage("Capture mode enabled on the active tab");
       window.close();
     } catch (error) {
       console.error("Failed to start capture:", error);
@@ -172,9 +170,9 @@ export function App() {
         }
       });
       await refreshLibraryState(collection.id, setLibraryState, setStatusMessage);
-      setStatusMessage(`Created collection "${collection.name}".`);
+      setStatusMessage(`Created collection "${collection.name}"`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Could not create collection.");
+      setStatusMessage(error instanceof Error ? error.message : "Could not create collection");
     }
   };
 
@@ -200,7 +198,7 @@ export function App() {
         )
       }));
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Could not update collection.");
+      setStatusMessage(error instanceof Error ? error.message : "Could not update collection");
     }
   };
 
@@ -220,37 +218,34 @@ export function App() {
         }
       });
       await refreshLibraryState(null, setLibraryState, setStatusMessage);
-      setStatusMessage(`Deleted "${collection.name}".`);
+      setStatusMessage(`Deleted "${collection.name}"`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Could not delete collection.");
+      setStatusMessage(error instanceof Error ? error.message : "Could not delete collection");
     }
   };
 
-  const handleMoveComponent = async (componentId: string): Promise<void> => {
+  const handleMoveComponentToCollection = async (
+    componentId: string,
+    targetCollectionId: string
+  ): Promise<void> => {
     const sourceComponent = getComponentById(libraryState.componentsByCollectionId, componentId);
     if (!sourceComponent) {
       return;
     }
 
-    const candidateCollections = libraryState.collections.filter(
-      (collection) => collection.id !== sourceComponent.collectionId
-    );
-    if (candidateCollections.length === 0) {
-      setStatusMessage("No other collection available.");
+    const normalizedTargetCollectionId = targetCollectionId.trim();
+    if (!normalizedTargetCollectionId || normalizedTargetCollectionId === sourceComponent.collectionId) {
       return;
     }
 
-    const optionsText = candidateCollections.map((collection) => `${collection.id}: ${collection.name}`).join("\n");
-    const selectedTargetCollectionId = window.prompt(
-      `Move to collection id:\n${optionsText}`,
-      candidateCollections[0].id
+    const hasTarget = libraryState.collections.some(
+      (collection) => collection.id === normalizedTargetCollectionId
     );
-    if (!selectedTargetCollectionId) {
+    if (!hasTarget) {
       return;
     }
-
     try {
-      const movedComponent = await libraryRepository.moveComponent(componentId, selectedTargetCollectionId.trim());
+      const movedComponent = await libraryRepository.moveComponent(componentId, normalizedTargetCollectionId);
       await notifyLibraryUpdated({
         type: "LIBRARY_UPDATED",
         payload: {
@@ -259,9 +254,9 @@ export function App() {
         }
       });
       await refreshLibraryState(libraryState.selectedCollectionId, setLibraryState, setStatusMessage);
-      setStatusMessage("Component moved.");
+      setStatusMessage("Component moved");
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Could not move component.");
+      setStatusMessage(error instanceof Error ? error.message : "Could not move component");
     }
   };
 
@@ -282,9 +277,9 @@ export function App() {
         }
       });
       await refreshLibraryState(libraryState.selectedCollectionId, setLibraryState, setStatusMessage);
-      setStatusMessage("Component deleted.");
+      setStatusMessage("Component deleted");
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Could not delete component.");
+      setStatusMessage(error instanceof Error ? error.message : "Could not delete component");
     }
   };
 
@@ -301,33 +296,21 @@ export function App() {
   const isLoadingLibrary = libraryState.isLoading && libraryState.collections.length === 0;
   if (isLoadingLibrary) {
     return (
-      <main className="flex h-[560px] w-full max-w-full items-center justify-center overflow-x-hidden bg-slate-50 p-6">
-        <p className="text-xs text-slate-600">Loading library...</p>
+      <main className="flex h-[560px] w-full max-w-full items-center justify-center overflow-x-hidden bg-surface p-4">
+        <p className="text-xs text-muted-foreground">Loading library...</p>
       </main>
     );
   }
 
   return (
-    <main className="flex h-[560px] w-full max-w-full flex-col overflow-x-hidden bg-gradient-to-b from-slate-100 via-slate-50 to-white p-3">
+    <main className="flex h-[560px] w-full max-w-full flex-col overflow-hidden border border-border bg-background">
       <CaptureHeader
         isCaptureDisabled={!isCaptureAvailable || isCaptureStarting}
         onStartCapture={handleCaptureStart}
+        statusMessage={statusMessage}
       />
 
-      <div className="mt-2 mb-2 min-h-6">
-        {statusMessage ? (
-          <Badge
-            variant="outline"
-            className="rounded-md border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700"
-          >
-            {statusMessage}
-          </Badge>
-        ) : null}
-      </div>
-
-      <Separator className="mb-3 bg-slate-200" />
-
-      <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <CollectionRail
           collections={libraryState.collections}
           selectedCollectionId={libraryState.selectedCollectionId}
@@ -335,26 +318,30 @@ export function App() {
           onSelectCollection={(collectionId) => {
             void handleSelectCollection(collectionId);
           }}
+          onDeleteCollection={(collectionId) => {
+            void handleDeleteCollection(collectionId);
+          }}
           onCreateCollection={async (input) => {
             await handleCreateCollection(input);
           }}
           onUpdateCollection={async (collectionId, patch) => {
             await handleUpdateCollection(collectionId, patch);
           }}
-          onDeleteCollection={(collectionId) => {
-            void handleDeleteCollection(collectionId);
-          }}
         />
 
         <LibraryGrid
           collection={selectedCollection}
+          collections={libraryState.collections}
           components={selectedComponents}
           onOpenDetails={setActiveComponentId}
-          onMoveComponent={(componentId) => {
-            void handleMoveComponent(componentId);
+          onMoveComponentToCollection={(componentId, targetCollectionId) => {
+            void handleMoveComponentToCollection(componentId, targetCollectionId);
           }}
           onDeleteComponent={(componentId) => {
             void handleDeleteComponent(componentId);
+          }}
+          onDeleteCollection={(collectionId) => {
+            void handleDeleteCollection(collectionId);
           }}
         />
       </div>
@@ -414,7 +401,7 @@ async function refreshLibraryState(
     isLoading: false
   });
   await setSelectedCollectionPreference(selectedCollectionId);
-  setStatusMessage(`${countComponents(componentsByCollectionId)} saved component(s).`);
+  setStatusMessage(`${countComponents(componentsByCollectionId)} saved component(s)`);
 }
 
 function countComponents(componentsByCollectionId: Record<string, SavedComponent[]>): number {

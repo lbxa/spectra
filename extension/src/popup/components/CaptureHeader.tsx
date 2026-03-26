@@ -1,20 +1,30 @@
 import { Button } from "@/components/ui/button";
+import { Orb } from "./Orb";
 
 type CaptureHeaderProps = {
   isCaptureDisabled: boolean;
   onStartCapture: () => Promise<void>;
+  statusMessage: string;
 };
 
-export function CaptureHeader({ isCaptureDisabled, onStartCapture }: CaptureHeaderProps) {
+export function CaptureHeader({ isCaptureDisabled, onStartCapture, statusMessage }: CaptureHeaderProps) {
   return (
-    <header className="sticky top-0 z-10 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="min-w-0">
-        <h1 className="truncate text-sm font-semibold tracking-tight text-slate-900">Spectra Library</h1>
-        <p className="text-[11px] text-slate-500">Capture components into Inbox, then organize collections</p>
+    <header className="sticky top-0 z-10 flex items-center justify-between gap-1.5 border-b border-border bg-background px-1 py-1">
+      <div className="flex min-w-0 items-center gap-2">
+        <Orb />
+        <div className="min-w-0">
+          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">Spectra Library</h1>
+          {statusMessage ? (
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {statusMessage}
+            </p>
+          ) : null}
+        </div>
       </div>
       <Button
         type="button"
-        className="size-12 rounded-xl bg-slate-900 p-2 text-white shadow-sm hover:bg-slate-800"
+        size="sm"
+        className="h-9 w-9 rounded-md px-0 shadow-none"
         disabled={isCaptureDisabled}
         onClick={() => {
           void onStartCapture();
@@ -22,15 +32,15 @@ export function CaptureHeader({ isCaptureDisabled, onStartCapture }: CaptureHead
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="24"
-          height="24"
+          width="18"
+          height="18"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="lucide lucide-mouse-pointer-click-icon lucide-mouse-pointer-click"
+          className="h-4 w-4"
         >
           <path d="M14 4.1 12 6" />
           <path d="m5.1 8-2.9-.8" />
