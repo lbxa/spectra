@@ -1,44 +1,17 @@
-const STORAGE_KEY = "components";
-const STORAGE_SOFT_LIMIT_BYTES = Math.floor((chrome.storage.local.QUOTA_BYTES || 10_485_760) * 0.9);
+import {
+  isIncomingRuntimeMessage,
+  type LibraryUpdatedMessage,
+  type SaveComponentPayload,
+  type SaveComponentResponse
+} from "./lib/library/messages";
+import { libraryRepository } from "./lib/library/repository";
+import { INBOX_COLLECTION_ID, type SavedComponent } from "./lib/library/types";
 
 type Bounds = {
   left: number;
   top: number;
   width: number;
   height: number;
-};
-
-type SaveComponentPayload = {
-  html: string;
-  url: string;
-  title: string;
-  bounds: Bounds;
-  devicePixelRatio: number;
-};
-
-type StartCaptureMessage = {
-  type: "START_CAPTURE";
-};
-
-type SaveComponentMessage = {
-  type: "SAVE_COMPONENT";
-  payload: SaveComponentPayload;
-};
-
-type IncomingMessage = StartCaptureMessage | SaveComponentMessage;
-
-type SavedComponent = {
-  id: string;
-  url: string;
-  title: string;
-  capturedAt: string;
-  html: string;
-  screenshotDataUrl: string;
-};
-
-type SaveComponentResponse = {
-  ok: boolean;
-  error?: string;
 };
 
 chrome.action.onClicked.addListener(async (tab) => {
@@ -49,7 +22,8 @@ chrome.action.onClicked.addListener(async (tab) => {
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ["content.js"]
+      files: ["content.js"],
+      world: "ISOLATED"
     });
   } catch (error) {
     console.error("Failed to inject content script from action click:", error);
@@ -57,7 +31,7 @@ chrome.action.onClicked.addListener(async (tab) => {
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
-  if (!isIncomingMessage(message)) {
+  if (!isIncomingRuntimeMessage(message)) {
     return false;
   }
 
@@ -90,18 +64,6 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   return false;
 });
 
-function isIncomingMessage(message: unknown): message is IncomingMessage {
-  if (!message || typeof message !== "object") {
-    return false;
-  }
-
-  const candidate = message as Partial<IncomingMessage>;
-  if (candidate.type === "START_CAPTURE") {
-    return true;
-  }
-  return candidate.type === "SAVE_COMPONENT" && "payload" in candidate;
-}
-
 async function injectContentScript(): Promise<void> {
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab || typeof tab.id !== "number") {
@@ -113,7 +75,8 @@ async function injectContentScript(): Promise<void> {
 
   await chrome.scripting.executeScript({
     target: { tabId: tab.id },
-    files: ["content.js"]
+    files: ["content.js"],
+    world: "ISOLATED"
   });
 }
 
@@ -128,6 +91,7 @@ async function handleSaveComponent(
   payload: SaveComponentPayload,
   sender: chrome.runtime.MessageSender
 ): Promise<void> {
+  await libraryRepository.initLibrary();
   validatePayload(payload);
 
   const windowId = sender?.tab?.windowId;
@@ -142,21 +106,22 @@ async function handleSaveComponent(
 
   const record: SavedComponent = {
     id: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}`,
+    collectionId: INBOX_COLLECTION_ID,
     url: payload.url,
     title: payload.title,
     capturedAt: new Date().toISOString(),
     html: payload.html,
     screenshotDataUrl: croppedDataUrl
   };
-
-  const stored = await chrome.storage.local.get(STORAGE_KEY);
-  const existing = Array.isArray(stored[STORAGE_KEY]) ? (stored[STORAGE_KEY] as SavedComponent[]) : [];
-  const components = [record, ...existing];
-  const projectedStorageBytes = estimateStorageBytes({ [STORAGE_KEY]: components });
-  if (projectedStorageBytes > STORAGE_SOFT_LIMIT_BYTES) {
-    throw new Error("Captured snapshot is too large to save. Select a smaller element and try again.");
-  }
-  await chrome.storage.local.set({ [STORAGE_KEY]: components });
+  const savedComponent = await libraryRepository.saveComponent(record);
+  await notifyLibraryUpdated({
+    type: "LIBRARY_UPDATED",
+    payload: {
+      event: "COMPONENT_SAVED",
+      component: savedComponent,
+      collectionId: savedComponent.collectionId
+    }
+  });
 }
 
 function validatePayload(payload: SaveComponentPayload): void {
@@ -256,7 +221,10 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-function estimateStorageBytes(value: unknown): number {
-  const encoder = new TextEncoder();
-  return encoder.encode(JSON.stringify(value)).length;
+async function notifyLibraryUpdated(message: LibraryUpdatedMessage): Promise<void> {
+  try {
+    await chrome.runtime.sendMessage(message);
+  } catch {
+    // Ignore when no extension views are listening.
+  }
 }

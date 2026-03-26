@@ -1,9 +1,9 @@
-import type { PopupSaveComponentResponse, PopupStartCaptureMessage } from "../types";
+import type { SaveComponentResponse, StartCaptureMessage } from "@/lib/library/messages";
 
 export async function startCapture(): Promise<void> {
   const response = (await chrome.runtime.sendMessage({
     type: "START_CAPTURE"
-  } satisfies PopupStartCaptureMessage)) as PopupSaveComponentResponse;
+  } satisfies StartCaptureMessage)) as SaveComponentResponse;
 
   if (!response?.ok) {
     throw new Error(response?.error || "Could not start capture.");

@@ -2,11 +2,23 @@
   "mcpServers": {
     "context7": {
       "command": "bunx",
-      "args": ["-y", "@upstash/context7-mcp"]
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ]
     },
     "chrome-devtools": {
       "command": "bunx",
-      "args": ["chrome-devtools-mcp@latest"]
+      "args": [
+        "chrome-devtools-mcp@latest"
+      ]
+    },
+    "shadcn": {
+      "command": "npx",
+      "args": [
+        "shadcn@latest",
+        "mcp"
+      ]
     }
   }
 }

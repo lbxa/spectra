@@ -1,0 +1,49 @@
+---
+description: Shadcn UI standards for React UI development
+globs: **/*.tsx
+alwaysApply: false
+---
+
+# Shadcn UI Best Practices
+
+- Prefer existing primitives from `@/components/ui/*` before creating new base UI components.
+- Keep components single-purpose and composable; split large views into smaller modules.
+- Put reusable primitives in `components/ui`; place domain-specific components by feature (e.g., `components/forms`).
+- Use PascalCase for component files and camelCase for functions/variables.
+
+## Component Usage
+
+- Prefer variants and `className` composition over custom CSS files.
+- Use `cn` from `@/lib/utils` for conditional classes; avoid manual class string concatenation.
+- Keep behavior in hooks/container components and keep UI components mostly presentational.
+- For forms, use accessible patterns: labels, descriptions, errors, and `aria-invalid` when applicable.
+
+## Anti-patterns To Avoid
+
+- Duplicating existing shadcn primitives for style-only differences.
+- Heavy one-off CSS overrides instead of Tailwind utilities/variants.
+- Components with too many responsibilities or deeply nested conditional rendering.
+- Directly handling unsafe HTML or exposing secrets in client-side code.
+
+## Performance, Security, and Testing
+
+- Lazy-load non-critical routes/components when it improves initial load time.
+- Clean up timers, subscriptions, and listeners in `useEffect`.
+- Use memoization APIs only when profiling shows real render bottlenecks.
+- Validate/sanitize user input and use schema validation (e.g., Zod) for forms and API boundaries.
+- Add unit/integration tests for critical flows and accessibility behavior.
+
+## Preferred Import Pattern
+
+```tsx
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+
+export function SaveButton({ busy }: { busy?: boolean }) {
+  return (
+    <Button type="submit" disabled={busy} className={cn("w-full", busy && "opacity-80")}>
+      {busy ? "Saving..." : "Save"}
+    </Button>
+  )
+}
+```

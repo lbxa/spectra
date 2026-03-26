@@ -16,6 +16,12 @@ Chrome Extension (Manifest V3) for capturing visible UI elements as reusable ref
 - `samples/v1/*`: pre-pruning extraction outputs.
 - `samples/v2/*`: post-pruning extraction outputs.
 
+## File Naming Convention
+
+- Use `kebab-case` for non-component filenames.
+- Use `PascalCase` for React component filenames.
+- Keep symbol naming idiomatic: React components remain `PascalCase`.
+
 ## Build and Typecheck
 
 This repo uses TypeScript with `chrome-types`.

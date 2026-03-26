@@ -334,7 +334,7 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
     };
 
     try {
-      const response = (await chrome.runtime.sendMessage({
+      const response = (await sendRuntimeMessage({
         type: "SAVE_COMPONENT",
         payload
       } satisfies SaveComponentMessage)) as SaveComponentResponse;
@@ -584,9 +584,20 @@ function showToast(message: string): void {
 }
 
 function getCaptureFailureMessage(error: unknown): string {
+  if (error instanceof Error && error.message.includes("runtime unavailable")) {
+    return "Extension runtime unavailable. Reload the extension, then refresh this tab.";
+  }
   if (error instanceof Error && error.message.includes("too large to save")) {
     return "Snapshot too large. Select a smaller element.";
   }
   return "Capture failed.";
+}
+
+async function sendRuntimeMessage(message: SaveComponentMessage): Promise<unknown> {
+  const runtime = globalThis.chrome?.runtime;
+  if (!runtime || typeof runtime.sendMessage !== "function") {
+    throw new Error("Extension runtime unavailable.");
+  }
+  return runtime.sendMessage(message);
 }
 })();
