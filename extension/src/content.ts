@@ -407,7 +407,11 @@ function inlineComputedStyles(originalElement: Element, clonedElement: Element):
   }
 
   const computedStyle = window.getComputedStyle(originalElement);
-  for (const propertyName of computedStyle) {
+  for (let index = 0; index < computedStyle.length; index += 1) {
+    const propertyName = computedStyle.item(index);
+    if (!propertyName) {
+      continue;
+    }
     if (!shouldKeepCssProperty(propertyName)) {
       continue;
     }
