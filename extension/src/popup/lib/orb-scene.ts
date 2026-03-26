@@ -3,7 +3,7 @@ import {
   AmbientLight,
   BufferAttribute,
   BufferGeometry,
-  Clock,
+  Timer,
   Color,
   Group,
   HemisphereLight,
@@ -174,7 +174,7 @@ class OrbController implements OrbSceneHandle {
   private readonly renderer: WebGLRenderer;
   private readonly scene: Scene;
   private readonly camera: PerspectiveCamera;
-  private readonly clock: Clock;
+  private readonly timer: Timer;
   private readonly orbGroup: Group;
 
   private readonly coreGeometry: SphereGeometry;
@@ -207,7 +207,7 @@ class OrbController implements OrbSceneHandle {
     this.renderer.setClearColor(0x000000, 0);
     this.container.appendChild(this.renderer.domElement);
 
-    this.clock = new Clock();
+    this.timer = new Timer();
     this.orbGroup = new Group();
     this.scene.add(this.orbGroup);
 
@@ -261,7 +261,7 @@ class OrbController implements OrbSceneHandle {
       return;
     }
     this.isRunning = true;
-    this.clock.start();
+    this.timer.reset();
     this.animate();
   }
 
@@ -329,10 +329,11 @@ class OrbController implements OrbSceneHandle {
     this.scene.add(keyLight);
   }
 
-  private animate = (): void => {
+  private animate = (timestamp?: number): void => {
     this.frameId = requestAnimationFrame(this.animate);
-    const delta = this.clock.getDelta();
-    const elapsed = this.clock.elapsedTime;
+    this.timer.update(timestamp);
+    const delta = this.timer.getDelta();
+    const elapsed = this.timer.getElapsed();
 
     const targetAmplitude = 0.15 + Math.sin(elapsed * 1.15) * 0.03 + Math.sin(elapsed * 0.54) * 0.02;
     const targetBass = 0.09 + Math.sin(elapsed * 0.88 + 0.9) * 0.025;
@@ -366,7 +367,7 @@ class OrbController implements OrbSceneHandle {
 
   private updateCamera(delta: number, tilt: number): void {
     const targetX = tilt * 0.24;
-    const targetY = Math.sin(this.clock.elapsedTime * 0.42) * 0.08;
+    const targetY = Math.sin(this.timer.getElapsed() * 0.42) * 0.08;
     this.camera.position.x = MathUtils.damp(this.camera.position.x, targetX, 3.2, delta);
     this.camera.position.y = MathUtils.damp(this.camera.position.y, targetY, 3.2, delta);
     this.camera.lookAt(0, 0, 0);
@@ -380,7 +381,7 @@ class OrbController implements OrbSceneHandle {
     this.particleMaterial.color.copy(newColor);
     this.particleMaterial.opacity = 0.4 + amplitude * 0.5;
     this.orbGroup.rotation.y += delta * (0.12 + amplitude * 0.2);
-    this.orbGroup.rotation.x = Math.sin(this.clock.elapsedTime * 0.33) * 0.06;
+    this.orbGroup.rotation.x = Math.sin(this.timer.getElapsed() * 0.33) * 0.06;
   }
 }
 

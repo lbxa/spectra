@@ -3,9 +3,19 @@
   "name": "Spectra",
   "version": "1.0.0",
   "description": "Capture visible UI elements as reusable HTML and screenshot references.",
+  "icons": {
+    "16": "icons/orb.png",
+    "32": "icons/orb.png",
+    "48": "icons/orb.png",
+    "128": "icons/orb.png"
+  },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Spectra"
+    "default_title": "Spectra",
+    "default_icon": {
+      "16": "icons/orb.png",
+      "32": "icons/orb.png"
+    }
   },
   "background": {
     "service_worker": "background.js"
