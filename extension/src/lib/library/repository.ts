@@ -20,38 +20,54 @@ const COMPONENTS_BY_COLLECTION_INDEX = "byCollectionId";
 const COLLECTION_NAME_MAX_LENGTH = 60;
 const COLLECTION_DESCRIPTION_MAX_LENGTH = 280;
 
-let databasePromise: Promise<IDBDatabase> | null = null;
-let initializationPromise: Promise<void> | null = null;
+class IndexedDbLibraryRepository implements LibraryRepository {
+  private static instance: IndexedDbLibraryRepository | null = null;
 
-export const libraryRepository: LibraryRepository = {
+  private databasePromise: Promise<IDBDatabase> | null = null;
+  private initializationPromise: Promise<void> | null = null;
+
+  private constructor() {}
+
+  static getInstance(): IndexedDbLibraryRepository {
+    if (!IndexedDbLibraryRepository.instance) {
+      IndexedDbLibraryRepository.instance = new IndexedDbLibraryRepository();
+    }
+    return IndexedDbLibraryRepository.instance;
+  }
+
   async getLibraryMeta(): Promise<LibraryMeta> {
-    await initLibraryState();
-    return readLibraryMeta();
-  },
+    await this.initLibraryState();
+    return this.readLibraryMeta();
+  }
+
   async initLibrary(): Promise<void> {
-    await initLibraryState();
-  },
+    await this.initLibraryState();
+  }
+
   async listCollections(): Promise<Collection[]> {
-    await initLibraryState();
-    const collections = await readonlyTransaction([COLLECTIONS_STORE], async (transaction) => {
+    await this.initLibraryState();
+    const collections = await this.readonlyTransaction([COLLECTIONS_STORE], async (transaction) => {
       const collectionStore = transaction.objectStore(COLLECTIONS_STORE);
       return requestToPromise<Collection[]>(collectionStore.getAll());
     });
     return collections.sort((left, right) => byDescendingDate(left.updatedAt, right.updatedAt));
-  },
+  }
+
   async getCollection(id: string): Promise<Collection | null> {
-    await initLibraryState();
+    await this.initLibraryState();
     if (!id) {
       return null;
     }
-    return readonlyTransaction([COLLECTIONS_STORE], async (transaction) => {
+
+    return this.readonlyTransaction([COLLECTIONS_STORE], async (transaction) => {
       const collectionStore = transaction.objectStore(COLLECTIONS_STORE);
       const collection = await requestToPromise<Collection | undefined>(collectionStore.get(id));
       return collection ?? null;
     });
-  },
+  }
+
   async createCollection(input: { name: string; description?: string }): Promise<Collection> {
-    await initLibraryState();
+    await this.initLibraryState();
     const now = new Date().toISOString();
     const collection: Collection = {
       id: createId(),
@@ -62,7 +78,7 @@ export const libraryRepository: LibraryRepository = {
       isSystem: false
     };
 
-    await readwriteTransaction([COLLECTIONS_STORE, LIBRARY_META_STORE], async (transaction) => {
+    await this.readwriteTransaction([COLLECTIONS_STORE, LIBRARY_META_STORE], async (transaction) => {
       const collectionStore = transaction.objectStore(COLLECTIONS_STORE);
       collectionStore.put(collection);
 
@@ -79,17 +95,18 @@ export const libraryRepository: LibraryRepository = {
     });
 
     return collection;
-  },
+  }
+
   async updateCollection(
     id: string,
     patch: Partial<Pick<Collection, "name" | "description">>
   ): Promise<Collection> {
-    await initLibraryState();
+    await this.initLibraryState();
     if (!id) {
       throw new Error("Collection id is required.");
     }
 
-    const updatedCollection = await readwriteTransaction(
+    const updatedCollection = await this.readwriteTransaction(
       [COLLECTIONS_STORE, LIBRARY_META_STORE],
       async (transaction) => {
         const collectionStore = transaction.objectStore(COLLECTIONS_STORE);
@@ -128,9 +145,10 @@ export const libraryRepository: LibraryRepository = {
     );
 
     return updatedCollection;
-  },
+  }
+
   async deleteCollection(id: string): Promise<void> {
-    await initLibraryState();
+    await this.initLibraryState();
     if (!id) {
       throw new Error("Collection id is required.");
     }
@@ -138,7 +156,7 @@ export const libraryRepository: LibraryRepository = {
       throw new Error("Inbox cannot be deleted.");
     }
 
-    await readwriteTransaction(
+    await this.readwriteTransaction(
       [COLLECTIONS_STORE, COMPONENTS_STORE, LIBRARY_META_STORE],
       async (transaction) => {
         const collectionStore = transaction.objectStore(COLLECTIONS_STORE);
@@ -184,10 +202,11 @@ export const libraryRepository: LibraryRepository = {
         }
       }
     );
-  },
+  }
+
   async listComponents(collectionId?: string): Promise<SavedComponent[]> {
-    await initLibraryState();
-    const components = await readonlyTransaction([COMPONENTS_STORE], async (transaction) => {
+    await this.initLibraryState();
+    const components = await this.readonlyTransaction([COMPONENTS_STORE], async (transaction) => {
       const componentStore = transaction.objectStore(COMPONENTS_STORE);
       if (collectionId) {
         const byCollectionIndex = componentStore.index(COMPONENTS_BY_COLLECTION_INDEX);
@@ -196,22 +215,25 @@ export const libraryRepository: LibraryRepository = {
       return requestToPromise<SavedComponent[]>(componentStore.getAll());
     });
     return components.sort((left, right) => byDescendingDate(left.capturedAt, right.capturedAt));
-  },
+  }
+
   async getComponent(id: string): Promise<SavedComponent | null> {
-    await initLibraryState();
+    await this.initLibraryState();
     if (!id) {
       return null;
     }
-    return readonlyTransaction([COMPONENTS_STORE], async (transaction) => {
+
+    return this.readonlyTransaction([COMPONENTS_STORE], async (transaction) => {
       const componentStore = transaction.objectStore(COMPONENTS_STORE);
       const component = await requestToPromise<SavedComponent | undefined>(componentStore.get(id));
       return component ?? null;
     });
-  },
-  async saveComponent(input: SavedComponent): Promise<SavedComponent> {
-    await initLibraryState();
+  }
 
-    const savedComponent = await readwriteTransaction(
+  async saveComponent(input: SavedComponent): Promise<SavedComponent> {
+    await this.initLibraryState();
+
+    const savedComponent = await this.readwriteTransaction(
       [COMPONENTS_STORE, COLLECTIONS_STORE, LIBRARY_META_STORE],
       async (transaction) => {
         const componentStore = transaction.objectStore(COMPONENTS_STORE);
@@ -252,9 +274,10 @@ export const libraryRepository: LibraryRepository = {
     );
 
     return savedComponent;
-  },
+  }
+
   async moveComponent(id: string, targetCollectionId: string): Promise<SavedComponent> {
-    await initLibraryState();
+    await this.initLibraryState();
     if (!id) {
       throw new Error("Component id is required.");
     }
@@ -262,7 +285,7 @@ export const libraryRepository: LibraryRepository = {
       throw new Error("Target collection id is required.");
     }
 
-    return readwriteTransaction(
+    return this.readwriteTransaction(
       [COMPONENTS_STORE, COLLECTIONS_STORE, LIBRARY_META_STORE],
       async (transaction) => {
         const componentStore = transaction.objectStore(COMPONENTS_STORE);
@@ -317,14 +340,15 @@ export const libraryRepository: LibraryRepository = {
         return movedComponent;
       }
     );
-  },
+  }
+
   async deleteComponent(id: string): Promise<void> {
-    await initLibraryState();
+    await this.initLibraryState();
     if (!id) {
       throw new Error("Component id is required.");
     }
 
-    await readwriteTransaction([COMPONENTS_STORE, COLLECTIONS_STORE, LIBRARY_META_STORE], async (transaction) => {
+    await this.readwriteTransaction([COMPONENTS_STORE, COLLECTIONS_STORE, LIBRARY_META_STORE], async (transaction) => {
       const componentStore = transaction.objectStore(COMPONENTS_STORE);
       const collectionStore = transaction.objectStore(COLLECTIONS_STORE);
       const libraryMetaStore = transaction.objectStore(LIBRARY_META_STORE);
@@ -358,69 +382,137 @@ export const libraryRepository: LibraryRepository = {
       }
     });
   }
-};
 
-async function initLibraryState(): Promise<void> {
-  if (!initializationPromise) {
-    initializationPromise = ensureBaseLibraryRecords();
+  private async initLibraryState(): Promise<void> {
+    if (!this.initializationPromise) {
+      this.initializationPromise = this.ensureBaseLibraryRecords();
+    }
+    await this.initializationPromise;
   }
-  await initializationPromise;
+
+  private async ensureBaseLibraryRecords(): Promise<void> {
+    await this.readwriteTransaction([LIBRARY_META_STORE, COLLECTIONS_STORE], async (transaction) => {
+      const metaStore = transaction.objectStore(LIBRARY_META_STORE);
+      const collectionStore = transaction.objectStore(COLLECTIONS_STORE);
+
+      const now = new Date().toISOString();
+
+      const inbox = await requestToPromise<Collection | undefined>(collectionStore.get(INBOX_COLLECTION_ID));
+      if (!inbox) {
+        const inboxCollection: Collection = {
+          id: INBOX_COLLECTION_ID,
+          name: INBOX_COLLECTION_NAME,
+          description: INBOX_COLLECTION_DESCRIPTION,
+          createdAt: now,
+          updatedAt: now,
+          isSystem: true
+        };
+        collectionStore.put(inboxCollection);
+      }
+
+      const meta = await requestToPromise<LibraryMeta | undefined>(metaStore.get(LIBRARY_ID));
+      if (!meta) {
+        const createdMeta: LibraryMeta = {
+          id: LIBRARY_ID,
+          createdAt: now,
+          updatedAt: now,
+          defaultCollectionId: INBOX_COLLECTION_ID
+        };
+        metaStore.put(createdMeta);
+        return;
+      }
+
+      const shouldRepairMeta = meta.defaultCollectionId !== INBOX_COLLECTION_ID;
+      if (shouldRepairMeta) {
+        const repairedMeta: LibraryMeta = {
+          ...meta,
+          defaultCollectionId: INBOX_COLLECTION_ID,
+          updatedAt: now
+        };
+        metaStore.put(repairedMeta);
+      }
+    });
+  }
+
+  private async readLibraryMeta(): Promise<LibraryMeta> {
+    return this.readonlyTransaction([LIBRARY_META_STORE], async (transaction) => {
+      const metaStore = transaction.objectStore(LIBRARY_META_STORE);
+      const meta = await requestToPromise<LibraryMeta | undefined>(metaStore.get(LIBRARY_ID));
+      if (!meta) {
+        throw new Error("Library metadata not initialized.");
+      }
+      return meta;
+    });
+  }
+
+  private async readonlyTransaction<T>(
+    storeNames: string[],
+    operation: (transaction: IDBTransaction) => Promise<T>
+  ): Promise<T> {
+    const database = await this.getDatabase();
+    const transaction = database.transaction(storeNames, "readonly");
+    const result = await operation(transaction);
+    await waitForTransaction(transaction);
+    return result;
+  }
+
+  private async readwriteTransaction<T>(
+    storeNames: string[],
+    operation: (transaction: IDBTransaction) => Promise<T>
+  ): Promise<T> {
+    const database = await this.getDatabase();
+    const transaction = database.transaction(storeNames, "readwrite");
+    const result = await operation(transaction);
+    await waitForTransaction(transaction);
+    return result;
+  }
+
+  private async getDatabase(): Promise<IDBDatabase> {
+    if (!this.databasePromise) {
+      this.databasePromise = this.openLibraryDatabase();
+    }
+    return this.databasePromise;
+  }
+
+  private openLibraryDatabase(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+
+      request.onupgradeneeded = () => {
+        const database = request.result;
+        if (!database.objectStoreNames.contains(LIBRARY_META_STORE)) {
+          database.createObjectStore(LIBRARY_META_STORE, { keyPath: "id" });
+        }
+        if (!database.objectStoreNames.contains(COLLECTIONS_STORE)) {
+          database.createObjectStore(COLLECTIONS_STORE, { keyPath: "id" });
+        }
+        if (!database.objectStoreNames.contains(COMPONENTS_STORE)) {
+          const componentStore = database.createObjectStore(COMPONENTS_STORE, { keyPath: "id" });
+          componentStore.createIndex(COMPONENTS_BY_COLLECTION_INDEX, "collectionId", { unique: false });
+        } else {
+          const transaction = request.transaction;
+          if (transaction) {
+            const componentStore = transaction.objectStore(COMPONENTS_STORE);
+            if (!componentStore.indexNames.contains(COMPONENTS_BY_COLLECTION_INDEX)) {
+              componentStore.createIndex(COMPONENTS_BY_COLLECTION_INDEX, "collectionId", { unique: false });
+            }
+          }
+        }
+      };
+
+      request.onsuccess = () => {
+        const database = request.result;
+        database.onversionchange = () => {
+          database.close();
+        };
+        resolve(database);
+      };
+      request.onerror = () => reject(request.error ?? new Error("Failed to open IndexedDB."));
+    });
+  }
 }
 
-async function ensureBaseLibraryRecords(): Promise<void> {
-  await readwriteTransaction([LIBRARY_META_STORE, COLLECTIONS_STORE], async (transaction) => {
-    const metaStore = transaction.objectStore(LIBRARY_META_STORE);
-    const collectionStore = transaction.objectStore(COLLECTIONS_STORE);
-
-    const now = new Date().toISOString();
-
-    const inbox = await requestToPromise<Collection | undefined>(collectionStore.get(INBOX_COLLECTION_ID));
-    if (!inbox) {
-      const inboxCollection: Collection = {
-        id: INBOX_COLLECTION_ID,
-        name: INBOX_COLLECTION_NAME,
-        description: INBOX_COLLECTION_DESCRIPTION,
-        createdAt: now,
-        updatedAt: now,
-        isSystem: true
-      };
-      collectionStore.put(inboxCollection);
-    }
-
-    const meta = await requestToPromise<LibraryMeta | undefined>(metaStore.get(LIBRARY_ID));
-    if (!meta) {
-      const createdMeta: LibraryMeta = {
-        id: LIBRARY_ID,
-        createdAt: now,
-        updatedAt: now,
-        defaultCollectionId: INBOX_COLLECTION_ID
-      };
-      metaStore.put(createdMeta);
-      return;
-    }
-
-    const shouldRepairMeta = meta.defaultCollectionId !== INBOX_COLLECTION_ID;
-    if (shouldRepairMeta) {
-      const repairedMeta: LibraryMeta = {
-        ...meta,
-        defaultCollectionId: INBOX_COLLECTION_ID,
-        updatedAt: now
-      };
-      metaStore.put(repairedMeta);
-    }
-  });
-}
-
-async function readLibraryMeta(): Promise<LibraryMeta> {
-  return readonlyTransaction([LIBRARY_META_STORE], async (transaction) => {
-    const metaStore = transaction.objectStore(LIBRARY_META_STORE);
-    const meta = await requestToPromise<LibraryMeta | undefined>(metaStore.get(LIBRARY_ID));
-    if (!meta) {
-      throw new Error("Library metadata not initialized.");
-    }
-    return meta;
-  });
-}
+export const libraryRepository: LibraryRepository = IndexedDbLibraryRepository.getInstance();
 
 function normalizeCollectionName(name: string): string {
   const normalizedName = name.trim();
@@ -500,72 +592,6 @@ function createId(): string {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
-}
-
-async function readonlyTransaction<T>(
-  storeNames: string[],
-  operation: (transaction: IDBTransaction) => Promise<T>
-): Promise<T> {
-  const database = await getDatabase();
-  const transaction = database.transaction(storeNames, "readonly");
-  const result = await operation(transaction);
-  await waitForTransaction(transaction);
-  return result;
-}
-
-async function readwriteTransaction<T>(
-  storeNames: string[],
-  operation: (transaction: IDBTransaction) => Promise<T>
-): Promise<T> {
-  const database = await getDatabase();
-  const transaction = database.transaction(storeNames, "readwrite");
-  const result = await operation(transaction);
-  await waitForTransaction(transaction);
-  return result;
-}
-
-async function getDatabase(): Promise<IDBDatabase> {
-  if (!databasePromise) {
-    databasePromise = openLibraryDatabase();
-  }
-  return databasePromise;
-}
-
-function openLibraryDatabase(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
-
-    request.onupgradeneeded = () => {
-      const database = request.result;
-      if (!database.objectStoreNames.contains(LIBRARY_META_STORE)) {
-        database.createObjectStore(LIBRARY_META_STORE, { keyPath: "id" });
-      }
-      if (!database.objectStoreNames.contains(COLLECTIONS_STORE)) {
-        database.createObjectStore(COLLECTIONS_STORE, { keyPath: "id" });
-      }
-      if (!database.objectStoreNames.contains(COMPONENTS_STORE)) {
-        const componentStore = database.createObjectStore(COMPONENTS_STORE, { keyPath: "id" });
-        componentStore.createIndex(COMPONENTS_BY_COLLECTION_INDEX, "collectionId", { unique: false });
-      } else {
-        const transaction = request.transaction;
-        if (transaction) {
-          const componentStore = transaction.objectStore(COMPONENTS_STORE);
-          if (!componentStore.indexNames.contains(COMPONENTS_BY_COLLECTION_INDEX)) {
-            componentStore.createIndex(COMPONENTS_BY_COLLECTION_INDEX, "collectionId", { unique: false });
-          }
-        }
-      }
-    };
-
-    request.onsuccess = () => {
-      const database = request.result;
-      database.onversionchange = () => {
-        database.close();
-      };
-      resolve(database);
-    };
-    request.onerror = () => reject(request.error ?? new Error("Failed to open IndexedDB."));
-  });
 }
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
