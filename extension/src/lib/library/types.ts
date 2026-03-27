@@ -11,7 +11,7 @@ export type Collection = {
 
 export type SavedComponent = {
   id: string;
-  collectionId: string;
+  collectionIds: string[];
   url: string;
   title: string;
   capturedAt: string;

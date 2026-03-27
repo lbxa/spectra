@@ -37,25 +37,32 @@ const MOCK_VARIANTS = [
 ] satisfies Array<Pick<SavedComponent, "url" | "title" | "html">>;
 
 const MOCK_CAPTURE_FIXTURES = createMockFixtures();
-const MINIMUM_DEV_FIXTURE_COUNT = 24;
 
-export async function seedDevLibraryIfEmpty(): Promise<boolean> {
+export async function seedDevLibraryIfEmpty(): Promise<number> {
   await libraryRepository.initLibrary();
   const existingComponents = await libraryRepository.listComponents();
-  if (existingComponents.length >= MINIMUM_DEV_FIXTURE_COUNT) {
-    return false;
+  const existingById = new Map(existingComponents.map((component) => [component.id, component]));
+  let restoredCount = 0;
+
+  for (const fixture of MOCK_CAPTURE_FIXTURES) {
+    const existing = existingById.get(fixture.id);
+    if (!existing) {
+      await libraryRepository.saveComponent(fixture);
+      restoredCount += 1;
+      continue;
+    }
+
+    if (!existing.collectionIds.includes(INBOX_COLLECTION_ID)) {
+      await libraryRepository.saveComponent({
+        ...existing,
+        collectionIds: Array.from(new Set([...existing.collectionIds, INBOX_COLLECTION_ID]))
+      });
+      restoredCount += 1;
+    }
   }
 
-  const existingIds = new Set(existingComponents.map((component) => component.id));
-  const missingFixtures = MOCK_CAPTURE_FIXTURES
-    .filter((fixture) => !existingIds.has(fixture.id))
-    .slice(0, MINIMUM_DEV_FIXTURE_COUNT - existingComponents.length);
-
-  for (const fixture of missingFixtures) {
-    await libraryRepository.saveComponent(fixture);
-  }
   await setSelectedCollectionPreference(INBOX_COLLECTION_ID);
-  return true;
+  return restoredCount;
 }
 
 function createMockFixtures(): SavedComponent[] {
@@ -67,7 +74,7 @@ function createMockFixtures(): SavedComponent[] {
     const variant = MOCK_VARIANTS[index % MOCK_VARIANTS.length];
     fixtures.push({
       id: `dev-mock-${String(index + 1).padStart(2, "0")}`,
-      collectionId: INBOX_COLLECTION_ID,
+      collectionIds: [INBOX_COLLECTION_ID],
       url: variant.url,
       title: `${variant.title} ${index + 1}`,
       capturedAt: new Date(baseTimestamp - index * 60_000).toISOString(),

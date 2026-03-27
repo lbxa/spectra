@@ -38,8 +38,8 @@ export function ComponentCard({
   onDeleteComponent
 }: ComponentCardProps) {
   const [isMovePickerOpen, setIsMovePickerOpen] = useState(false);
-  const destinationCollections = collections.filter((collection) => collection.id !== component.collectionId);
-  const hasMoveOptions = destinationCollections.length > 0;
+  const hasMoveOptions = collections.length > 0;
+  const isInCollection = (collectionId: string): boolean => component.collectionIds.includes(collectionId);
 
   return (
     <ContextMenu>
@@ -75,19 +75,27 @@ export function ComponentCard({
                     </PopoverTrigger>
                     <PopoverContent align="end" className="w-menu-w p-1">
                       <div className="grid">
-                        {destinationCollections.map((collection) => (
-                          <button
-                            key={collection.id}
-                            type="button"
-                            className="hover:bg-surface-subtle focus:bg-surface-subtle rounded-sm px-2 py-1.5 text-left text-[11px] font-medium text-foreground outline-none"
-                            onClick={() => {
-                              setIsMovePickerOpen(false);
-                              onMoveComponentToCollection(component.id, collection.id);
-                            }}
-                          >
-                            {collection.name}
-                          </button>
-                        ))}
+                          {collections.map((collection) => {
+                            const alreadyInCollection = isInCollection(collection.id);
+                            return (
+                              <button
+                                key={collection.id}
+                                type="button"
+                                disabled={alreadyInCollection}
+                                className="hover:bg-surface-subtle focus:bg-surface-subtle disabled:hover:bg-transparent flex items-center justify-between rounded-sm px-2 py-1.5 text-left text-[11px] font-medium text-foreground outline-none disabled:cursor-default disabled:opacity-60"
+                                onClick={() => {
+                                  if (alreadyInCollection) {
+                                    return;
+                                  }
+                                  setIsMovePickerOpen(false);
+                                  onMoveComponentToCollection(component.id, collection.id);
+                                }}
+                              >
+                                <span>{collection.name}</span>
+                                {alreadyInCollection ? <CheckIcon /> : null}
+                              </button>
+                            );
+                          })}
                       </div>
                     </PopoverContent>
                   </Popover>
@@ -145,16 +153,25 @@ export function ComponentCard({
             <ContextMenuSubTrigger>Move to</ContextMenuSubTrigger>
             <ContextMenuSubContent className="w-menu-w p-1">
               <ContextMenuGroup>
-                {destinationCollections.map((collection) => (
-                  <ContextMenuItem
-                    key={collection.id}
-                    onSelect={() => {
-                      onMoveComponentToCollection(component.id, collection.id);
-                    }}
-                  >
-                    {collection.name}
-                  </ContextMenuItem>
-                ))}
+                {collections.map((collection) => {
+                  const alreadyInCollection = isInCollection(collection.id);
+                  return (
+                    <ContextMenuItem
+                      key={collection.id}
+                      disabled={alreadyInCollection}
+                      className="justify-between"
+                      onSelect={() => {
+                        if (alreadyInCollection) {
+                          return;
+                        }
+                        onMoveComponentToCollection(component.id, collection.id);
+                      }}
+                    >
+                      <span>{collection.name}</span>
+                      {alreadyInCollection ? <CheckIcon /> : null}
+                    </ContextMenuItem>
+                  );
+                })}
               </ContextMenuGroup>
             </ContextMenuSubContent>
           </ContextMenuSub>
@@ -260,6 +277,26 @@ function DeleteIcon() {
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
       <path d="M3 6h18" />
       <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5 text-muted-foreground"
+      aria-hidden="true"
+    >
+      <path d="M20 6 9 17l-5-5" />
     </svg>
   );
 }

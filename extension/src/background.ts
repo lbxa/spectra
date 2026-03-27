@@ -106,7 +106,7 @@ async function handleSaveComponent(
 
   const record: SavedComponent = {
     id: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}`,
-    collectionId: INBOX_COLLECTION_ID,
+    collectionIds: [INBOX_COLLECTION_ID],
     url: payload.url,
     title: payload.title,
     capturedAt: new Date().toISOString(),
@@ -119,7 +119,7 @@ async function handleSaveComponent(
     payload: {
       event: "COMPONENT_SAVED",
       component: savedComponent,
-      collectionId: savedComponent.collectionId
+      collectionId: savedComponent.collectionIds[0]
     }
   });
 }

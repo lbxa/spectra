@@ -233,7 +233,7 @@ export function App() {
     }
 
     const normalizedTargetCollectionId = targetCollectionId.trim();
-    if (!normalizedTargetCollectionId || normalizedTargetCollectionId === sourceComponent.collectionId) {
+    if (!normalizedTargetCollectionId || sourceComponent.collectionIds.includes(normalizedTargetCollectionId)) {
       return;
     }
 
@@ -253,9 +253,9 @@ export function App() {
         }
       });
       await refreshLibraryState(libraryState.selectedCollectionId, setLibraryState, setStatusMessage);
-      setStatusMessage("Component moved");
+      setStatusMessage("Component added to collection");
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Could not move component");
+      setStatusMessage(error instanceof Error ? error.message : "Could not add component to collection");
     }
   };
 
@@ -272,7 +272,7 @@ export function App() {
         payload: {
           event: "COMPONENT_DELETED",
           id: componentId,
-          collectionId: sourceComponent.collectionId
+          collectionId: sourceComponent.collectionIds[0]
         }
       });
       await refreshLibraryState(libraryState.selectedCollectionId, setLibraryState, setStatusMessage);

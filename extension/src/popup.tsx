@@ -22,7 +22,10 @@ async function bootstrapPopup(container: HTMLElement): Promise<void> {
   const didInstallDevShim = installPopupDevChromeShimIfNeeded();
   if (didInstallDevShim && import.meta.env.DEV) {
     try {
-      await seedDevLibraryIfEmpty();
+      const restoredFixtureCount = await seedDevLibraryIfEmpty();
+      if (restoredFixtureCount > 0) {
+        console.info(`Restored ${restoredFixtureCount} missing dev fixture(s).`);
+      }
     } catch (error) {
       console.error("Failed to seed popup dev library fixtures:", error);
     }
