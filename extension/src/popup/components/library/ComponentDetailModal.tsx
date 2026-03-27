@@ -1,7 +1,9 @@
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -18,7 +20,7 @@ import {
   type Node,
   type NodeProps
 } from "@xyflow/react";
-import { Check } from "lucide-react";
+import { ArrowUpRight, Check } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { formatCapturedAt } from "../../lib/format-timestamp";
 import { FALLBACK_THUMBNAIL } from "../../types";
@@ -211,12 +213,41 @@ function TopCenterControlBar({
                 <ChevronUpIcon />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-menu-narrow-w">
-              <DropdownMenuLabel>More copy options</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem className="whitespace-nowrap">
+                <span>Open in ChatGPT</span>
+                <ArrowUpRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              </DropdownMenuItem>
+              <DropdownMenuItem className="whitespace-nowrap">
+                <span>Open in Claude</span>
+                <ArrowUpRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              </DropdownMenuItem>
+              <DropdownMenuItem className="whitespace-nowrap">
+                <span>Open in Gemini</span>
+                <ArrowUpRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>Open in ChatGPT</DropdownMenuItem>
-              <DropdownMenuItem>Open in Claude</DropdownMenuItem>
-              <DropdownMenuItem>Open in Gemini</DropdownMenuItem>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Other formats</DropdownMenuLabel>
+                <DropdownMenuItem disabled className="justify-between gap-2 whitespace-nowrap">
+                  <span>Copy as JSX</span>
+                  <Badge
+                    variant="outline"
+                    className="border-red-500/45 bg-red-500/10 text-[10px] font-semibold text-red-600 dark:text-red-400"
+                  >
+                    Soon
+                  </Badge>
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled className="justify-between gap-2 whitespace-nowrap">
+                  <span>Copy as JSX/Tailwind</span>
+                  <Badge
+                    variant="outline"
+                    className="border-red-500/45 bg-red-500/10 text-[10px] font-semibold text-red-600 dark:text-red-400"
+                  >
+                    Soon
+                  </Badge>
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
