@@ -4,13 +4,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Collection, SavedComponent } from "@/lib/library/types";
 import { useState } from "react";
 import { ComponentCard } from "./ComponentCard";
-import { ComponentDetailModal } from "./ComponentDetailModal";
+import { ComponentCanvas } from "./ComponentCanvas";
 
 type LibraryGridProps = {
   collection: Collection | null;
   collections: Collection[];
   components: SavedComponent[];
   activeComponent: SavedComponent | null;
+  isPreviewStarting: boolean;
+  onStartPreview: (component: SavedComponent) => void;
   onOpenDetails: (componentId: string) => void;
   onCloseDetails: () => void;
   onMoveComponentToCollection: (componentId: string, targetCollectionId: string) => void;
@@ -23,6 +25,8 @@ export function LibraryGrid({
   collections,
   components,
   activeComponent,
+  isPreviewStarting,
+  onStartPreview,
   onOpenDetails,
   onCloseDetails,
   onMoveComponentToCollection,
@@ -115,8 +119,10 @@ export function LibraryGrid({
       </ScrollArea>
 
       {activeComponent ? (
-        <ComponentDetailModal
+        <ComponentCanvas
           component={activeComponent}
+          isPreviewStarting={isPreviewStarting}
+          onStartPreview={onStartPreview}
           onClose={onCloseDetails}
           className="absolute inset-0 z-20"
         />

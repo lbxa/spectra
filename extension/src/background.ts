@@ -1,11 +1,16 @@
 import {
   isIncomingRuntimeMessage,
+  isPreviewStatusMessage,
   type LibraryUpdatedMessage,
   type SaveComponentPayload,
   type SaveComponentResponse
 } from "./lib/library/messages";
 import { libraryRepository } from "./lib/library/repository";
 import { INBOX_COLLECTION_ID, type SavedComponent } from "./lib/library/types";
+import { injectCaptureRuntime } from "./background/injector";
+import { handlePreviewStatus, handleStartPreview } from "./background/message-router";
+import { clearPreviewSession } from "./background/session-store";
+import { isCaptureSupportedUrl, requireActiveTab } from "./background/tab-gate";
 
 type Bounds = {
   left: number;
@@ -20,11 +25,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 
   try {
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ["content.js"],
-      world: "ISOLATED"
-    });
+    await injectCaptureRuntime(tab.id);
   } catch (error) {
     console.error("Failed to inject content script from action click:", error);
   }
@@ -48,6 +49,18 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
     return true;
   }
 
+  if (message.type === "START_PREVIEW") {
+    handleStartPreview(message)
+      .then((response) => sendResponse(response))
+      .catch((error: unknown) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Unable to start preview."
+        } satisfies SaveComponentResponse);
+      });
+    return true;
+  }
+
   if (message.type === "SAVE_COMPONENT") {
     handleSaveComponent(message.payload, sender)
       .then(() => sendResponse({ ok: true } satisfies SaveComponentResponse))
@@ -61,30 +74,33 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
     return true;
   }
 
+  if (isPreviewStatusMessage(message)) {
+    handlePreviewStatus(message, sender).catch((error: unknown) => {
+      console.error("Failed to process preview status:", error);
+    });
+    return false;
+  }
+
   return false;
 });
 
-async function injectContentScript(): Promise<void> {
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (!tab || typeof tab.id !== "number") {
-    throw new Error("No active tab available.");
+chrome.tabs.onRemoved.addListener((tabId) => {
+  void clearPreviewSession(tabId);
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === "loading" || typeof changeInfo.url === "string") {
+    void clearPreviewSession(tabId);
   }
+});
+
+async function injectContentScript(): Promise<void> {
+  const tab = await requireActiveTab();
   if (!isCaptureSupportedUrl(tab.url)) {
     throw new Error("Capture is not available on this page. Open an http(s) webpage and try again.");
   }
 
-  await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ["content.js"],
-    world: "ISOLATED"
-  });
-}
-
-function isCaptureSupportedUrl(url: string | undefined): boolean {
-  if (typeof url !== "string" || url.length === 0) {
-    return false;
-  }
-  return url.startsWith("http://") || url.startsWith("https://");
+  await injectCaptureRuntime(tab.id!);
 }
 
 async function handleSaveComponent(
@@ -111,7 +127,9 @@ async function handleSaveComponent(
     title: payload.title,
     capturedAt: new Date().toISOString(),
     html: payload.html,
-    screenshotDataUrl: croppedDataUrl
+    cssText: payload.cssText,
+    screenshotDataUrl: croppedDataUrl,
+    sourceHostSignature: payload.sourceHostSignature
   };
   const savedComponent = await libraryRepository.saveComponent(record);
   await notifyLibraryUpdated({
@@ -130,6 +148,9 @@ function validatePayload(payload: SaveComponentPayload): void {
   }
   if (typeof payload.html !== "string" || payload.html.length === 0) {
     throw new Error("Missing selected HTML.");
+  }
+  if (typeof payload.cssText !== "string") {
+    throw new Error("Missing selected CSS.");
   }
   if (typeof payload.url !== "string" || payload.url.length === 0) {
     throw new Error("Missing page URL.");
@@ -157,6 +178,9 @@ function validatePayload(payload: SaveComponentPayload): void {
     payload.devicePixelRatio <= 0
   ) {
     throw new Error("Invalid device pixel ratio.");
+  }
+  if (!payload.sourceHostSignature || typeof payload.sourceHostSignature !== "object") {
+    throw new Error("Missing host signature.");
   }
 }
 

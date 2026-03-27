@@ -26,29 +26,52 @@ import { formatCapturedAt } from "../../lib/format-timestamp";
 import { FALLBACK_THUMBNAIL } from "../../types";
 import "@xyflow/react/dist/style.css";
 
-type ComponentDetailModalProps = {
+type ComponentCanvasProps = {
   component: SavedComponent;
+  isPreviewStarting: boolean;
+  onStartPreview: (component: SavedComponent) => void;
   onClose: () => void;
   className?: string;
 };
 
 type ComponentNodeData = {
   component: SavedComponent;
+  onScreenshotLoad: () => void;
 };
 
 type ComponentFlowNode = Node<ComponentNodeData, "component-card">;
 
 const INITIAL_NODE_POSITION = { x: 180, y: 130 };
+const MIN_CANVAS_ZOOM = 0.1;
+const MAX_CANVAS_ZOOM = 4;
+const FIT_VIEW_OPTIONS = {
+  padding: 0.2,
+  minZoom: MIN_CANVAS_ZOOM,
+  maxZoom: MAX_CANVAS_ZOOM
+} as const;
+const FIT_VIEW_ANIMATION_OPTIONS = {
+  ...FIT_VIEW_OPTIONS,
+  duration: 200
+} as const;
 
 const nodeTypes = {
   "component-card": ComponentFlowNodeCard
 };
 
-export function ComponentDetailModal({ component, onClose, className }: ComponentDetailModalProps) {
+export function ComponentCanvas({
+  component,
+  isPreviewStarting,
+  onStartPreview,
+  onClose,
+  className
+}: ComponentCanvasProps) {
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
   const isCopied = copyStatus === "copied";
+  const [fitSequence, setFitSequence] = useState(0);
   const [nodes, setNodes, onNodesChange] = useNodesState<ComponentFlowNode>([
-    createComponentNode(component, INITIAL_NODE_POSITION)
+    createComponentNode(component, INITIAL_NODE_POSITION, () => {
+      setFitSequence((current) => current + 1);
+    })
   ]);
 
   useEffect(() => {
@@ -66,7 +89,12 @@ export function ComponentDetailModal({ component, onClose, className }: Componen
   }, [isCopied]);
 
   useEffect(() => {
-    setNodes([createComponentNode(component, INITIAL_NODE_POSITION)]);
+    setNodes([
+      createComponentNode(component, INITIAL_NODE_POSITION, () => {
+        setFitSequence((current) => current + 1);
+      })
+    ]);
+    setFitSequence((current) => current + 1);
   }, [component, setNodes]);
 
   const handleCopyRaw = async (): Promise<void> => {
@@ -92,9 +120,9 @@ export function ComponentDetailModal({ component, onClose, className }: Componen
         nodeTypes={nodeTypes}
         proOptions={{ hideAttribution: true }}
         fitView
-        fitViewOptions={{ padding: 0.45 }}
-        minZoom={0.6}
-        maxZoom={1.8}
+        fitViewOptions={FIT_VIEW_OPTIONS}
+        minZoom={MIN_CANVAS_ZOOM}
+        maxZoom={MAX_CANVAS_ZOOM}
         panOnDrag
         panOnScroll
         zoomOnDoubleClick={false}
@@ -106,10 +134,20 @@ export function ComponentDetailModal({ component, onClose, className }: Componen
         <TopLeftMetadataCard component={component} />
         <TopCenterControlBar
           onResetNodePosition={() => {
-            setNodes([createComponentNode(component, INITIAL_NODE_POSITION)]);
+            setNodes([
+              createComponentNode(component, INITIAL_NODE_POSITION, () => {
+                setFitSequence((current) => current + 1);
+              })
+            ]);
+            setFitSequence((current) => current + 1);
           }}
+          fitSequence={fitSequence}
           isCopied={isCopied}
           onCopyRaw={handleCopyRaw}
+          isPreviewStarting={isPreviewStarting}
+          onStartPreview={() => {
+            onStartPreview(component);
+          }}
         />
         <Panel position="top-right" className="m-3">
           <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[11px]" onClick={onClose}>
@@ -123,14 +161,27 @@ export function ComponentDetailModal({ component, onClose, className }: Componen
 
 function TopCenterControlBar({
   onResetNodePosition,
+  fitSequence,
   isCopied,
-  onCopyRaw
+  onCopyRaw,
+  isPreviewStarting,
+  onStartPreview
 }: {
   onResetNodePosition: () => void;
+  fitSequence: number;
   isCopied: boolean;
   onCopyRaw: () => Promise<void>;
+  isPreviewStarting: boolean;
+  onStartPreview: () => void;
 }) {
   const reactFlow = useReactFlow();
+  const fitViewToNode = (): void => {
+    void reactFlow.fitView(FIT_VIEW_ANIMATION_OPTIONS);
+  };
+
+  useEffect(() => {
+    fitViewToNode();
+  }, [fitSequence, reactFlow]);
 
   return (
     <Panel position="bottom-center" className="m-3">
@@ -146,7 +197,7 @@ function TopCenterControlBar({
         <ToolbarIconButton
           label="Fit view"
           onClick={() => {
-            void reactFlow.fitView({ duration: 200, padding: 0.45 });
+            fitViewToNode();
           }}
         >
           <FitIcon />
@@ -167,7 +218,7 @@ function TopCenterControlBar({
           className="h-7 px-2 text-[11px] text-foreground"
           onClick={onResetNodePosition}
         >
-          Reset view
+          Center
         </Button>
         <div className="flex items-center">
           <Button
@@ -251,6 +302,16 @@ function TopCenterControlBar({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        <div className="mx-1 h-5 w-px bg-border-strong/70" />
+        <Button
+          type="button"
+          size="sm"
+          className="h-7 px-2 text-[11px]"
+          disabled={isPreviewStarting}
+          onClick={onStartPreview}
+        >
+          {isPreviewStarting ? "Starting..." : "Preview"}
+        </Button>
       </div>
     </Panel>
   );
@@ -274,16 +335,13 @@ function ComponentFlowNodeCard({ data }: NodeProps<ComponentFlowNode>) {
   const { component } = data;
 
   return (
-    <div className="w-62 overflow-hidden rounded-xl border border-border-strong bg-background shadow-[0_20px_44px_rgba(11,58,103,0.26)]">
+    <div className="overflow-hidden rounded-xl border border-border-strong bg-background shadow-[0_20px_44px_rgba(11,58,103,0.26)]">
       <img
-        className="block h-34 w-full border-b border-border bg-surface object-cover"
+        className="block h-auto w-auto bg-surface"
         alt={component.title || "Captured component"}
         src={component.screenshotDataUrl || FALLBACK_THUMBNAIL}
+        onLoad={data.onScreenshotLoad}
       />
-      <div className="grid gap-1 p-2">
-        <p className="truncate text-xs font-semibold text-foreground">{component.title || "Untitled component"}</p>
-        <p className="truncate text-[11px] text-muted-foreground">{hostnameFromUrl(component.url)}</p>
-      </div>
     </div>
   );
 }
@@ -396,13 +454,14 @@ function ChevronUpIcon() {
 
 function createComponentNode(
   component: SavedComponent,
-  position: { x: number; y: number }
+  position: { x: number; y: number },
+  onScreenshotLoad: () => void
 ): ComponentFlowNode {
   return {
     id: component.id,
     type: "component-card",
     position,
-    data: { component }
+    data: { component, onScreenshotLoad }
   };
 }
 

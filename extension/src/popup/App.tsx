@@ -5,7 +5,13 @@ import type { Collection, SavedComponent } from "@/lib/library/types";
 import { CaptureHeader } from "./components/CaptureHeader";
 import { CollectionRail } from "./components/library/CollectionRail";
 import { LibraryGrid } from "./components/library/LibraryGrid";
-import { getCaptureStartErrorMessage, isPopupCaptureSupportedUrl, startCapture } from "./lib/messages";
+import {
+  getCaptureStartErrorMessage,
+  getPreviewStartErrorMessage,
+  isPopupCaptureSupportedUrl,
+  startCapture,
+  startPreview
+} from "./lib/messages";
 import { getLibraryPreferences, setSelectedCollectionPreference } from "./lib/library-preferences";
 
 type LibraryViewState = {
@@ -25,6 +31,7 @@ export function App() {
   const [statusMessage, setStatusMessage] = useState("");
   const [isCaptureAvailable, setIsCaptureAvailable] = useState(true);
   const [isCaptureStarting, setIsCaptureStarting] = useState(false);
+  const [isPreviewStarting, setIsPreviewStarting] = useState(false);
   const [activeComponentId, setActiveComponentId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -80,6 +87,15 @@ export function App() {
   useEffect(() => {
     const listener = (message: unknown): void => {
       if (!isLibraryUpdatedMessage(message)) {
+        return;
+      }
+      if (message.payload.event === "COLLECTION_UPDATED" && message.payload.collection) {
+        setLibraryState((current) => ({
+          ...current,
+          collections: current.collections.map((collection) =>
+            collection.id === message.payload.collection?.id ? message.payload.collection : collection
+          )
+        }));
         return;
       }
       void refreshLibraryState(libraryState.selectedCollectionId, setLibraryState, setStatusMessage);
@@ -141,6 +157,20 @@ export function App() {
       console.error("Failed to start capture:", error);
       setStatusMessage(getCaptureStartErrorMessage(error));
       setIsCaptureStarting(false);
+    }
+  };
+
+  const handlePreviewStart = async (component: SavedComponent): Promise<void> => {
+    setIsPreviewStarting(true);
+    setStatusMessage("Starting preview");
+    try {
+      await startPreview(component);
+      setStatusMessage("Preview mode enabled on active localhost tab");
+      window.close();
+    } catch (error) {
+      console.error("Failed to start preview:", error);
+      setStatusMessage(getPreviewStartErrorMessage(error));
+      setIsPreviewStarting(false);
     }
   };
 
@@ -333,6 +363,10 @@ export function App() {
           collections={libraryState.collections}
           components={selectedComponents}
           activeComponent={activeComponent}
+          isPreviewStarting={isPreviewStarting}
+          onStartPreview={(component) => {
+            void handlePreviewStart(component);
+          }}
           onOpenDetails={setActiveComponentId}
           onCloseDetails={() => {
             setActiveComponentId(null);

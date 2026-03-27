@@ -1,4 +1,9 @@
-import type { SaveComponentResponse, StartCaptureMessage } from "@/lib/library/messages";
+import type {
+  SaveComponentResponse,
+  StartCaptureMessage,
+  StartPreviewMessage
+} from "@/lib/library/messages";
+import type { SavedComponent } from "@/lib/library/types";
 
 export async function startCapture(): Promise<void> {
   const response = (await chrome.runtime.sendMessage({
@@ -7,6 +12,17 @@ export async function startCapture(): Promise<void> {
 
   if (!response?.ok) {
     throw new Error(response?.error || "Could not start capture.");
+  }
+}
+
+export async function startPreview(component: SavedComponent): Promise<void> {
+  const response = (await chrome.runtime.sendMessage({
+    type: "START_PREVIEW",
+    component
+  } satisfies StartPreviewMessage)) as SaveComponentResponse;
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "Could not start preview.");
   }
 }
 
@@ -29,4 +45,11 @@ export function getCaptureStartErrorMessage(error: unknown): string {
     return "Captured snapshot is too large to save. Select a smaller element.";
   }
   return "Failed to start capture.";
+}
+
+export function getPreviewStartErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.includes("localhost")) {
+    return "Preview is only available on localhost and 127.0.0.1.";
+  }
+  return "Failed to start preview.";
 }

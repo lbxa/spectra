@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "clean": "rm -rf dist",
-    "build:workers": "bun build extension/src/background.ts --outfile dist/background.js --target browser --format iife && bunx tsc -p tsconfig.content.json",
+    "build:workers": "bun build extension/src/background.ts --outfile dist/background.js --target browser --format iife && bunx tsc -p tsconfig.content.json && bun build extension/src/preview-runtime.ts --outfile dist/preview-runtime.js --target browser --format iife",
     "popup:build": "bunx vite build --config vite.popup.config.ts",
     "popup:dev": "bunx vite build --config vite.popup.config.ts --watch",
     "popup:hmr": "bunx vite --config vite.popup.config.ts --open /popup.dev.html",

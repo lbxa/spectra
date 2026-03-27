@@ -4,13 +4,14 @@ import {
   INBOX_COLLECTION_NAME,
   LIBRARY_ID,
   type Collection,
+  type HostSignature,
   type LibraryMeta,
   type LibraryRepository,
   type SavedComponent
 } from "./types";
 
 const DATABASE_NAME = "spectra-library";
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 
 const LIBRARY_META_STORE = "libraryMeta";
 const COLLECTIONS_STORE = "collections";
@@ -23,6 +24,8 @@ const COLLECTION_DESCRIPTION_MAX_LENGTH = 280;
 type LegacySavedComponent = Omit<SavedComponent, "collectionIds"> & {
   collectionId?: string;
   collectionIds?: string[];
+  cssText?: string;
+  sourceHostSignature?: HostSignature;
 };
 
 class IndexedDbLibraryRepository implements LibraryRepository {
@@ -530,7 +533,7 @@ class IndexedDbLibraryRepository implements LibraryRepository {
               });
             }
 
-            if (oldVersion < 2) {
+            if (oldVersion < 3) {
               migrateLegacyComponentMembership(componentStore);
             }
           }
@@ -580,6 +583,9 @@ function normalizeComponentInput(input: SavedComponent, defaultCollectionId: str
   if (!input.html.trim()) {
     throw new Error("Component HTML is required.");
   }
+  if (typeof input.cssText !== "string") {
+    throw new Error("Component CSS must be a string.");
+  }
   if (!input.screenshotDataUrl.trim()) {
     throw new Error("Component screenshot is required.");
   }
@@ -600,7 +606,9 @@ function normalizeComponentInput(input: SavedComponent, defaultCollectionId: str
     title: normalizedTitle,
     capturedAt: capturedAt.toISOString(),
     html: input.html,
-    screenshotDataUrl: input.screenshotDataUrl
+    cssText: input.cssText,
+    screenshotDataUrl: input.screenshotDataUrl,
+    sourceHostSignature: normalizeHostSignature(input.sourceHostSignature)
   };
 }
 
@@ -620,9 +628,12 @@ function normalizeStoredComponent(component: LegacySavedComponent, defaultCollec
     component.collectionIds ?? (component.collectionId ? [component.collectionId] : []),
     defaultCollectionId
   );
+  const sourceHostSignature = normalizeHostSignature(component.sourceHostSignature);
   return {
     ...component,
-    collectionIds
+    collectionIds,
+    cssText: typeof component.cssText === "string" ? component.cssText : "",
+    sourceHostSignature
   };
 }
 
@@ -638,6 +649,80 @@ function migrateLegacyComponentMembership(componentStore: IDBObjectStore): void 
     cursor.update(normalized);
     cursor.continue();
   };
+}
+
+function normalizeHostSignature(value: HostSignature | undefined): HostSignature {
+  if (!value || typeof value !== "object") {
+    return createUnknownHostSignature();
+  }
+
+  const ancestorTags = Array.isArray(value.ancestorTags)
+    ? value.ancestorTags.filter((tag) => typeof tag === "string")
+    : [];
+
+  return {
+    landmark: normalizeLandmark(value.landmark),
+    hostTag: typeof value.hostTag === "string" && value.hostTag ? value.hostTag : "div",
+    layoutMode: normalizeLayoutMode(value.layoutMode),
+    widthBucket: normalizeWidthBucket(value.widthBucket),
+    depth: Number.isFinite(value.depth) ? Math.max(0, Math.floor(value.depth)) : 0,
+    siblingCount: Number.isFinite(value.siblingCount) ? Math.max(0, Math.floor(value.siblingCount)) : 0,
+    repeatedSiblingTag:
+      typeof value.repeatedSiblingTag === "string" && value.repeatedSiblingTag ? value.repeatedSiblingTag : undefined,
+    ancestorTags,
+    nearbyHeading: typeof value.nearbyHeading === "string" && value.nearbyHeading ? value.nearbyHeading : undefined
+  };
+}
+
+function createUnknownHostSignature(): HostSignature {
+  return {
+    landmark: "unknown",
+    hostTag: "div",
+    layoutMode: "unknown",
+    widthBucket: "md",
+    depth: 0,
+    siblingCount: 0,
+    ancestorTags: []
+  };
+}
+
+function normalizeLandmark(value: HostSignature["landmark"] | undefined): HostSignature["landmark"] {
+  if (
+    value === "header" ||
+    value === "hero" ||
+    value === "main" ||
+    value === "section" ||
+    value === "article" ||
+    value === "aside" ||
+    value === "nav" ||
+    value === "footer" ||
+    value === "form" ||
+    value === "unknown"
+  ) {
+    return value;
+  }
+  return "unknown";
+}
+
+function normalizeLayoutMode(value: HostSignature["layoutMode"] | undefined): HostSignature["layoutMode"] {
+  if (
+    value === "block" ||
+    value === "flex-row" ||
+    value === "flex-column" ||
+    value === "grid" ||
+    value === "inline" ||
+    value === "unknown"
+  ) {
+    return value;
+  }
+  return "unknown";
+}
+
+function normalizeWidthBucket(value: HostSignature["widthBucket"] | undefined): HostSignature["widthBucket"] {
+  if (value === "xs" || value === "sm" || value === "md" || value === "lg" || value === "xl") {
+    return value;
+  }
+  return "md";
 }
 
 function deriveFallbackTitle(url: string): string {

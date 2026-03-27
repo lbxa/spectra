@@ -17,6 +17,15 @@ type CollectionRailProps = {
   ) => Promise<void>;
 };
 
+type CollectionDraft = {
+  name: string;
+  description: string;
+  isDirty: boolean;
+  isEditing: boolean;
+};
+
+const COLLECTION_DRAFT_SAVE_DEBOUNCE_MS = 300;
+
 export function CollectionRail({
   collections,
   selectedCollectionId,
@@ -28,11 +37,13 @@ export function CollectionRail({
 }: CollectionRailProps) {
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newCollectionDescription, setNewCollectionDescription] = useState("");
-  const [draftsById, setDraftsById] = useState<Record<string, { name: string; description: string }>>({});
+  const [draftsById, setDraftsById] = useState<Record<string, CollectionDraft>>({});
   const [isCreateFormVisible, setIsCreateFormVisible] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [pendingRenameCollectionId, setPendingRenameCollectionId] = useState<string | null>(null);
   const saveTimeoutByIdRef = useRef<Record<string, number>>({});
+  const draftsByIdRef = useRef<Record<string, CollectionDraft>>({});
+  const collectionsRef = useRef<Collection[]>(collections);
 
   const normalizedCollections = useMemo(
     () =>
@@ -45,40 +56,106 @@ export function CollectionRail({
   );
 
   useEffect(() => {
-    const nextDrafts: Record<string, { name: string; description: string }> = {};
-    for (const collection of normalizedCollections) {
-      nextDrafts[collection.id] = {
-        name: collection.name,
-        description: collection.description
-      };
-    }
-    setDraftsById(nextDrafts);
+    setDraftsById((current) => {
+      const nextDrafts: Record<string, CollectionDraft> = {};
+      for (const collection of normalizedCollections) {
+        const existing = current[collection.id];
+        if (existing && (existing.isDirty || existing.isEditing)) {
+          nextDrafts[collection.id] = existing;
+          continue;
+        }
+        nextDrafts[collection.id] = {
+          name: collection.name,
+          description: collection.description,
+          isDirty: false,
+          isEditing: false
+        };
+      }
+      return nextDrafts;
+    });
   }, [normalizedCollections]);
 
-  const scheduleSave = (collectionId: string): void => {
+  useEffect(() => {
+    draftsByIdRef.current = draftsById;
+  }, [draftsById]);
+
+  useEffect(() => {
+    collectionsRef.current = collections;
+  }, [collections]);
+
+  useEffect(() => {
+    return () => {
+      for (const timeoutId of Object.values(saveTimeoutByIdRef.current)) {
+        window.clearTimeout(timeoutId);
+      }
+      saveTimeoutByIdRef.current = {};
+    };
+  }, []);
+
+  const clearScheduledSave = (collectionId: string): void => {
     const existingTimeout = saveTimeoutByIdRef.current[collectionId];
     if (typeof existingTimeout === "number") {
       window.clearTimeout(existingTimeout);
+      delete saveTimeoutByIdRef.current[collectionId];
     }
+  };
+
+  const scheduleSave = (collectionId: string): void => {
+    clearScheduledSave(collectionId);
     saveTimeoutByIdRef.current[collectionId] = window.setTimeout(() => {
       void flushSave(collectionId);
-    }, 500);
+    }, COLLECTION_DRAFT_SAVE_DEBOUNCE_MS);
   };
 
   const flushSave = async (collectionId: string): Promise<void> => {
-    const draft = draftsById[collectionId];
-    const source = collections.find((collection) => collection.id === collectionId);
+    clearScheduledSave(collectionId);
+
+    const draft = draftsByIdRef.current[collectionId];
+    const source = collectionsRef.current.find((collection) => collection.id === collectionId);
     if (!draft || !source) {
       return;
     }
+
     const nextName = draft.name.trim();
     const nextDescription = draft.description.trim();
     if (nextName === source.name && nextDescription === source.description) {
+      setDraftsById((current) => {
+        const existing = current[collectionId];
+        if (!existing) {
+          return current;
+        }
+        return {
+          ...current,
+          [collectionId]: {
+            name: source.name,
+            description: source.description,
+            isDirty: false,
+            isEditing: existing.isEditing
+          }
+        };
+      });
       return;
     }
+
     await onUpdateCollection(collectionId, {
       name: nextName,
       description: nextDescription
+    });
+
+    setDraftsById((current) => {
+      const existing = current[collectionId];
+      if (!existing) {
+        return current;
+      }
+      return {
+        ...current,
+        [collectionId]: {
+          name: nextName,
+          description: nextDescription,
+          isDirty: false,
+          isEditing: existing.isEditing
+        }
+      };
     });
   };
 
@@ -216,8 +293,14 @@ export function CollectionRail({
                   setDraftsById((current) => ({
                     ...current,
                     [collection.id]: {
-                      ...current[collection.id],
-                      name
+                      ...(current[collection.id] ?? {
+                        name: collection.name,
+                        description: collection.description,
+                        isDirty: false,
+                        isEditing: false
+                      }),
+                      name,
+                      isDirty: true
                     }
                   }));
                   scheduleSave(collection.id);
@@ -226,13 +309,50 @@ export function CollectionRail({
                   setDraftsById((current) => ({
                     ...current,
                     [collection.id]: {
-                      ...current[collection.id],
-                      description
+                      ...(current[collection.id] ?? {
+                        name: collection.name,
+                        description: collection.description,
+                        isDirty: false,
+                        isEditing: false
+                      }),
+                      description,
+                      isDirty: true
                     }
                   }));
                   scheduleSave(collection.id);
                 }}
+                onFocusDraft={() => {
+                  setDraftsById((current) => {
+                    const existing = current[collection.id];
+                    if (!existing) {
+                      return current;
+                    }
+                    if (existing.isEditing) {
+                      return current;
+                    }
+                    return {
+                      ...current,
+                      [collection.id]: {
+                        ...existing,
+                        isEditing: true
+                      }
+                    };
+                  });
+                }}
                 onBlurDraft={() => {
+                  setDraftsById((current) => {
+                    const existing = current[collection.id];
+                    if (!existing || !existing.isEditing) {
+                      return current;
+                    }
+                    return {
+                      ...current,
+                      [collection.id]: {
+                        ...existing,
+                        isEditing: false
+                      }
+                    };
+                  });
                   void flushSave(collection.id);
                 }}
               />

@@ -22,6 +22,7 @@ type CollectionCardProps = {
   onNameFocusHandled: () => void;
   onChangeName: (name: string) => void;
   onChangeDescription: (description: string) => void;
+  onFocusDraft: () => void;
   onBlurDraft: () => void;
 };
 
@@ -37,6 +38,7 @@ export function CollectionCard({
   onNameFocusHandled,
   onChangeName,
   onChangeDescription,
+  onFocusDraft,
   onBlurDraft
 }: CollectionCardProps) {
   const nameInputRef = useRef<HTMLInputElement | null>(null);
@@ -59,6 +61,9 @@ export function CollectionCard({
             tabIndex={0}
             onClick={onSelect}
             onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) {
+                return;
+              }
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 onSelect();
@@ -85,6 +90,11 @@ export function CollectionCard({
                     onChangeName(event.target.value);
                   }
                 }}
+                onFocus={() => {
+                  if (isSelected) {
+                    onFocusDraft();
+                  }
+                }}
                 onBlur={() => {
                   if (isSelected) {
                     onBlurDraft();
@@ -108,6 +118,11 @@ export function CollectionCard({
                 onChange={(event) => {
                   if (isSelected) {
                     onChangeDescription(event.target.value);
+                  }
+                }}
+                onFocus={() => {
+                  if (isSelected) {
+                    onFocusDraft();
                   }
                 }}
                 onBlur={() => {

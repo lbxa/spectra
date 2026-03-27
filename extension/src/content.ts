@@ -8,10 +8,22 @@ type Bounds = {
 
 type SaveComponentPayload = {
   html: string;
+  cssText: string;
   url: string;
   title: string;
   bounds: Bounds;
   devicePixelRatio: number;
+  sourceHostSignature: {
+    landmark: "header" | "hero" | "main" | "section" | "article" | "aside" | "nav" | "footer" | "form" | "unknown";
+    hostTag: string;
+    layoutMode: "block" | "flex-row" | "flex-column" | "grid" | "inline" | "unknown";
+    widthBucket: "xs" | "sm" | "md" | "lg" | "xl";
+    depth: number;
+    siblingCount: number;
+    repeatedSiblingTag?: string;
+    ancestorTags: string[];
+    nearbyHeading?: string;
+  };
 };
 
 type SaveComponentMessage = {
@@ -322,6 +334,7 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
     const snapshotHtml = buildStandaloneSnapshotHtml(target);
     const payload: SaveComponentPayload = {
       html: snapshotHtml,
+      cssText: collectDocumentCssText(),
       url: window.location.href,
       title: document.title || "",
       bounds: {
@@ -330,7 +343,8 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
         width: rect.width,
         height: rect.height
       },
-      devicePixelRatio: window.devicePixelRatio || 1
+      devicePixelRatio: window.devicePixelRatio || 1,
+      sourceHostSignature: computeLocalHostSignature(target)
     };
 
     try {
@@ -546,6 +560,127 @@ function toAbsoluteUrl(value: string, baseUrl: string): string | null {
   } catch {
     return null;
   }
+}
+
+function collectDocumentCssText(): string {
+  let cssText = "";
+  for (const styleSheet of Array.from(document.styleSheets)) {
+    try {
+      const rules = styleSheet.cssRules;
+      for (const rule of Array.from(rules)) {
+        cssText += `${rule.cssText}\n`;
+      }
+    } catch {
+      // Ignore cross-origin stylesheets blocked by the browser.
+    }
+  }
+  return cssText;
+}
+
+function computeLocalHostSignature(element: Element): SaveComponentPayload["sourceHostSignature"] {
+  const computed = window.getComputedStyle(element);
+  const rect = element.getBoundingClientRect();
+  const hostTag = element.tagName.toLowerCase();
+  return {
+    landmark: resolveLocalLandmark(element, hostTag),
+    hostTag,
+    layoutMode: resolveLocalLayoutMode(computed.display, computed.flexDirection),
+    widthBucket: resolveLocalWidthBucket(rect.width),
+    depth: resolveLocalDepth(element),
+    siblingCount: element.parentElement?.children.length ?? 0,
+    repeatedSiblingTag: resolveRepeatedSiblingTag(element),
+    ancestorTags: resolveAncestorTags(element),
+    nearbyHeading: resolveNearbyHeading(element)
+  };
+}
+
+function resolveLocalLandmark(
+  element: Element,
+  hostTag: string
+): SaveComponentPayload["sourceHostSignature"]["landmark"] {
+  if (
+    hostTag === "header" ||
+    hostTag === "main" ||
+    hostTag === "section" ||
+    hostTag === "article" ||
+    hostTag === "aside" ||
+    hostTag === "nav" ||
+    hostTag === "footer" ||
+    hostTag === "form"
+  ) {
+    return hostTag;
+  }
+  if (hostTag === "div" && (element.className as string).toLowerCase?.().includes("hero")) {
+    return "hero";
+  }
+  return "unknown";
+}
+
+function resolveLocalLayoutMode(
+  display: string,
+  flexDirection: string
+): SaveComponentPayload["sourceHostSignature"]["layoutMode"] {
+  if (display === "grid" || display === "inline-grid") {
+    return "grid";
+  }
+  if (display === "inline") {
+    return "inline";
+  }
+  if (display === "flex" || display === "inline-flex") {
+    return flexDirection.startsWith("column") ? "flex-column" : "flex-row";
+  }
+  if (display === "block" || display === "flow-root" || display === "list-item") {
+    return "block";
+  }
+  return "unknown";
+}
+
+function resolveLocalWidthBucket(width: number): SaveComponentPayload["sourceHostSignature"]["widthBucket"] {
+  if (width < 320) return "xs";
+  if (width < 640) return "sm";
+  if (width < 960) return "md";
+  if (width < 1280) return "lg";
+  return "xl";
+}
+
+function resolveLocalDepth(element: Element): number {
+  let depth = 0;
+  let current = element.parentElement;
+  while (current) {
+    depth += 1;
+    current = current.parentElement;
+  }
+  return depth;
+}
+
+function resolveRepeatedSiblingTag(element: Element): string | undefined {
+  const siblings = Array.from(element.parentElement?.children ?? []);
+  const counts: Record<string, number> = {};
+  for (const sibling of siblings) {
+    const tag = sibling.tagName.toLowerCase();
+    counts[tag] = (counts[tag] ?? 0) + 1;
+  }
+  return Object.entries(counts).find(([, count]) => count > 1)?.[0];
+}
+
+function resolveAncestorTags(element: Element): string[] {
+  const tags: string[] = [];
+  let current = element.parentElement;
+  while (current && tags.length < 6) {
+    tags.push(current.tagName.toLowerCase());
+    current = current.parentElement;
+  }
+  return tags;
+}
+
+function resolveNearbyHeading(element: Element): string | undefined {
+  const scopedHeading = element.querySelector("h1,h2,h3,h4,h5,h6");
+  if (scopedHeading?.textContent) {
+    return scopedHeading.textContent.trim().slice(0, 80);
+  }
+  const nearestSection = element.closest("section,article,main");
+  const sectionHeading = nearestSection?.querySelector("h1,h2,h3,h4,h5,h6");
+  return sectionHeading?.textContent?.trim().slice(0, 80) || undefined;
 }
 
 function createOverlay(): HTMLDivElement {

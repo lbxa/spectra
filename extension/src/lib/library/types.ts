@@ -9,6 +9,18 @@ export type Collection = {
   isSystem: boolean;
 };
 
+export type HostSignature = {
+  landmark: "header" | "hero" | "main" | "section" | "article" | "aside" | "nav" | "footer" | "form" | "unknown";
+  hostTag: string;
+  layoutMode: "block" | "flex-row" | "flex-column" | "grid" | "inline" | "unknown";
+  widthBucket: "xs" | "sm" | "md" | "lg" | "xl";
+  depth: number;
+  siblingCount: number;
+  repeatedSiblingTag?: string;
+  ancestorTags: string[];
+  nearbyHeading?: string;
+};
+
 export type SavedComponent = {
   id: string;
   collectionIds: string[];
@@ -16,7 +28,9 @@ export type SavedComponent = {
   title: string;
   capturedAt: string;
   html: string;
+  cssText: string;
   screenshotDataUrl: string;
+  sourceHostSignature: HostSignature;
 };
 
 export type LibraryMeta = {
