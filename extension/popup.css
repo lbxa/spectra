@@ -2,6 +2,18 @@
 
 @theme inline {
   --spacing: 0.25rem;
+  --spacing-popup-w: 780px;
+  --spacing-popup-h: 560px;
+  --spacing-rail-w: 220px;
+  --spacing-modal-max-h: 85vh;
+  --spacing-menu-w: 11rem;
+  --spacing-menu-min-w: 11.25rem;
+  --spacing-menu-wide-w: 13rem;
+  --spacing-menu-narrow-w: 10rem;
+  --spacing-detail-preview-h: 12.5rem;
+  --spacing-code-max-h: 17.5rem;
+  --spacing-card-thumb-h: 8.25rem;
+  --spacing-scrollbar-pad: 1px;
   --breakpoint-sm: 40rem;
   --breakpoint-md: 48rem;
   --breakpoint-lg: 64rem;
@@ -39,14 +51,14 @@
 @layer base {
   html,
   body {
-    width: 780px;
-    min-height: 560px;
-    max-width: 780px;
+    width: var(--spacing-popup-w);
+    min-height: var(--spacing-popup-h);
+    max-width: var(--spacing-popup-w);
     overflow-x: hidden;
   }
 
   #root {
-    min-height: 560px;
+    min-height: var(--spacing-popup-h);
     overflow-x: hidden;
   }
 }

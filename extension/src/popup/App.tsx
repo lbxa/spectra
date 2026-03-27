@@ -4,7 +4,6 @@ import { libraryRepository } from "@/lib/library/repository";
 import type { Collection, SavedComponent } from "@/lib/library/types";
 import { CaptureHeader } from "./components/CaptureHeader";
 import { CollectionRail } from "./components/library/CollectionRail";
-import { ComponentDetailModal } from "./components/library/ComponentDetailModal";
 import { LibraryGrid } from "./components/library/LibraryGrid";
 import { getCaptureStartErrorMessage, isPopupCaptureSupportedUrl, startCapture } from "./lib/messages";
 import { getLibraryPreferences, setSelectedCollectionPreference } from "./lib/library-preferences";
@@ -296,14 +295,14 @@ export function App() {
   const isLoadingLibrary = libraryState.isLoading && libraryState.collections.length === 0;
   if (isLoadingLibrary) {
     return (
-      <main className="flex h-[560px] w-full max-w-full items-center justify-center overflow-x-hidden bg-surface p-4">
+      <main className="flex h-popup-h w-full max-w-full items-center justify-center overflow-x-hidden bg-surface p-4">
         <p className="text-xs text-muted-foreground">Loading library...</p>
       </main>
     );
   }
 
   return (
-    <main className="flex h-[560px] w-full max-w-full flex-col overflow-hidden border border-border bg-background">
+    <main className="flex h-popup-h w-full max-w-full flex-col overflow-hidden border border-border bg-background">
       <CaptureHeader
         isCaptureDisabled={!isCaptureAvailable || isCaptureStarting}
         onStartCapture={handleCaptureStart}
@@ -333,7 +332,11 @@ export function App() {
           collection={selectedCollection}
           collections={libraryState.collections}
           components={selectedComponents}
+          activeComponent={activeComponent}
           onOpenDetails={setActiveComponentId}
+          onCloseDetails={() => {
+            setActiveComponentId(null);
+          }}
           onMoveComponentToCollection={(componentId, targetCollectionId) => {
             void handleMoveComponentToCollection(componentId, targetCollectionId);
           }}
@@ -345,15 +348,6 @@ export function App() {
           }}
         />
       </div>
-
-      {activeComponent ? (
-        <ComponentDetailModal
-          component={activeComponent}
-          onClose={() => {
-            setActiveComponentId(null);
-          }}
-        />
-      ) : null}
     </main>
   );
 }

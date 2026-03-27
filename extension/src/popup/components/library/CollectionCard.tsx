@@ -137,7 +137,7 @@ export function CollectionCard({
             </div>
           </div>
         </ContextMenuTrigger>
-        <ContextMenuContent className="w-44">
+        <ContextMenuContent className="w-menu-w">
           <ContextMenuItem onSelect={onSelect}>Select</ContextMenuItem>
           <ContextMenuItem onSelect={onRequestRename}>Rename</ContextMenuItem>
           <ContextMenuSeparator />

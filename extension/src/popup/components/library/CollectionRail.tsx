@@ -103,7 +103,7 @@ export function CollectionRail({
   };
 
   return (
-    <aside className="flex h-full min-h-0 w-[220px] min-w-[220px] flex-col border-r border-border bg-surface/80 p-1">
+    <aside className="flex h-full min-h-0 w-rail-w min-w-rail-w flex-col border-r border-border bg-surface/80 p-2">
       <div className="mb-1.5 flex items-center justify-between gap-1">
         <div className="min-w-0">
           <h2 className="truncate text-xs font-semibold tracking-[0.08em] text-muted-foreground uppercase">Library</h2>
@@ -171,7 +171,7 @@ export function CollectionRail({
         <Button
           type="button"
           size="sm"
-          className="mb-1.5 h-7 w-full px-2 text-[11px]"
+          className="mb-1.5 h-7 w-full hover:bg-primary hover:text-white px-2 text-[11px] text-blue-800 bg-blue-200 cursor-pointer"
           onClick={() => {
             setIsCreateFormVisible(true);
           }}

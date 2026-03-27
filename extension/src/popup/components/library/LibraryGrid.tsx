@@ -4,12 +4,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Collection, SavedComponent } from "@/lib/library/types";
 import { useState } from "react";
 import { ComponentCard } from "./ComponentCard";
+import { ComponentDetailModal } from "./ComponentDetailModal";
 
 type LibraryGridProps = {
   collection: Collection | null;
   collections: Collection[];
   components: SavedComponent[];
+  activeComponent: SavedComponent | null;
   onOpenDetails: (componentId: string) => void;
+  onCloseDetails: () => void;
   onMoveComponentToCollection: (componentId: string, targetCollectionId: string) => void;
   onDeleteComponent: (componentId: string) => void;
   onDeleteCollection: (collectionId: string) => void;
@@ -19,7 +22,9 @@ export function LibraryGrid({
   collection,
   collections,
   components,
+  activeComponent,
   onOpenDetails,
+  onCloseDetails,
   onMoveComponentToCollection,
   onDeleteComponent,
   onDeleteCollection
@@ -28,7 +33,7 @@ export function LibraryGrid({
   const [isDeleteCollectionConfirmOpen, setIsDeleteCollectionConfirmOpen] = useState(false);
 
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col p-1">
+    <section className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col p-2">
       <div className="mb-1.5 flex min-w-0 items-start justify-between gap-1.5">
         <div className="min-w-0">
           <h2 className="truncate text-lg font-semibold text-foreground">
@@ -50,7 +55,7 @@ export function LibraryGrid({
                 <DeleteIcon />
               </button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-52 p-2">
+            <PopoverContent align="end" className="w-menu-wide-w p-2">
               <p className="mb-1.5 text-[11px] text-muted-foreground">
                 Delete <span className="font-semibold">{collection.name}</span>? Components move to Inbox.
               </p>
@@ -108,6 +113,14 @@ export function LibraryGrid({
           </div>
         )}
       </ScrollArea>
+
+      {activeComponent ? (
+        <ComponentDetailModal
+          component={activeComponent}
+          onClose={onCloseDetails}
+          className="absolute inset-0 z-20"
+        />
+      ) : null}
     </section>
   );
 }

@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { Collection, SavedComponent } from "@/lib/library/types";
 import { cn } from "@/lib/utils";
 import { forwardRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { formatCapturedAt } from "../../lib/format-timestamp";
 import { FALLBACK_THUMBNAIL } from "../../types";
 
 type ComponentCardProps = {
@@ -46,7 +47,7 @@ export function ComponentCard({
         <Card className="overflow-hidden rounded-md shadow-none">
           <CardContent className="p-0">
             <img
-              className="block h-33 w-full border-b border-border bg-surface object-cover"
+              className="block h-card-thumb-h w-full border-b border-border bg-surface object-cover"
               alt={component.title || "Captured component"}
               src={component.screenshotDataUrl || FALLBACK_THUMBNAIL}
             />
@@ -55,7 +56,7 @@ export function ComponentCard({
                 {component.title || "Untitled component"}
               </h3>
               <p className="truncate text-[11px] text-muted-foreground">{hostnameFromUrl(component.url)}</p>
-              <p className="text-[10px] text-muted-foreground">{formatTimestamp(component.capturedAt)}</p>
+              <p className="text-[10px] text-muted-foreground">{formatCapturedAt(component.capturedAt)}</p>
               <div className="mt-0.5 flex flex-wrap justify-end gap-1.5">
                 <ComponentActionButton
                   ariaLabel="Open details"
@@ -72,7 +73,7 @@ export function ComponentCard({
                         <MoveIcon />
                       </ComponentActionButton>
                     </PopoverTrigger>
-                    <PopoverContent align="end" className="w-44 p-1">
+                    <PopoverContent align="end" className="w-menu-w p-1">
                       <div className="grid">
                         {destinationCollections.map((collection) => (
                           <button
@@ -97,7 +98,7 @@ export function ComponentCard({
                       <DeleteIcon />
                     </ComponentActionButton>
                   </PopoverTrigger>
-                  <PopoverContent align="end" className="w-52 p-2">
+                  <PopoverContent align="end" className="w-menu-wide-w p-2">
                     <p className="mb-1.5 text-[11px] text-muted-foreground">Delete this component permanently?</p>
                     <div className="flex gap-1">
                       <Button
@@ -131,7 +132,7 @@ export function ComponentCard({
           </CardContent>
         </Card>
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-44">
+      <ContextMenuContent className="w-menu-w">
         <ContextMenuItem
           onSelect={() => {
             onOpenDetails(component.id);
@@ -142,7 +143,7 @@ export function ComponentCard({
         {hasMoveOptions ? (
           <ContextMenuSub>
             <ContextMenuSubTrigger>Move to</ContextMenuSubTrigger>
-            <ContextMenuSubContent className="w-44 p-1">
+            <ContextMenuSubContent className="w-menu-w p-1">
               <ContextMenuGroup>
                 {destinationCollections.map((collection) => (
                   <ContextMenuItem
@@ -271,10 +272,3 @@ function hostnameFromUrl(url: string): string {
   }
 }
 
-function formatTimestamp(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Captured time unavailable";
-  }
-  return date.toLocaleString();
-}
