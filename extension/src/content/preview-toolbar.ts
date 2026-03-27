@@ -1,7 +1,8 @@
 import type { InsertionRelation } from "../lib/library/messages";
+import { autoUpdate, computePosition, flip, offset, shift } from "@floating-ui/dom";
 
 export type PreviewToolbarControls = {
-  mount: (targetRect: DOMRect, relation: InsertionRelation) => void;
+  mount: (target: HTMLElement, relation: InsertionRelation) => void;
   unmount: () => void;
 };
 
@@ -18,7 +19,8 @@ export function createPreviewToolbar(
   container.style.alignItems = "center";
   container.style.gap = "6px";
   container.style.padding = "6px";
-  container.style.borderRadius = "999px";
+  container.style.borderRadius = "12px";
+  container.style.border = "1px solid rgba(148,163,184,0.28)";
   container.style.background = "rgba(17,24,39,0.95)";
   container.style.color = "#f8fafc";
   container.style.font = "11px/1 ui-sans-serif, system-ui, -apple-system, sans-serif";
@@ -42,15 +44,31 @@ export function createPreviewToolbar(
 
   container.append(undo, retarget, relation);
   host.appendChild(container);
+  let cleanupAutoUpdate: (() => void) | null = null;
 
   return {
-    mount(targetRect, currentRelation) {
+    mount(target, currentRelation) {
       relation.value = currentRelation;
       host.style.display = "block";
-      host.style.left = `${Math.max(0, targetRect.left)}px`;
-      host.style.top = `${Math.max(0, targetRect.top - 36)}px`;
+
+      const updatePosition = (): void => {
+        void computePosition(target, host, {
+          placement: "top",
+          strategy: "fixed",
+          middleware: [offset(10), flip({ padding: 8 }), shift({ padding: 8 })]
+        }).then(({ x, y }) => {
+          host.style.left = `${Math.max(0, Math.round(x))}px`;
+          host.style.top = `${Math.max(0, Math.round(y))}px`;
+        });
+      };
+
+      cleanupAutoUpdate?.();
+      cleanupAutoUpdate = autoUpdate(target, host, updatePosition);
+      updatePosition();
     },
     unmount() {
+      cleanupAutoUpdate?.();
+      cleanupAutoUpdate = null;
       host.style.display = "none";
       container.remove();
     }

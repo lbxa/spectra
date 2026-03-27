@@ -10,7 +10,7 @@ import { INBOX_COLLECTION_ID, type SavedComponent } from "./lib/library/types";
 import { injectCaptureRuntime } from "./background/injector";
 import { handlePreviewStatus, handleStartPreview } from "./background/message-router";
 import { clearPreviewSession } from "./background/session-store";
-import { isCaptureSupportedUrl, requireActiveTab } from "./background/tab-gate";
+import { assertCaptureSupportedTab, requireActiveTab } from "./background/tab-gate";
 
 type Bounds = {
   left: number;
@@ -96,9 +96,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 
 async function injectContentScript(): Promise<void> {
   const tab = await requireActiveTab();
-  if (!isCaptureSupportedUrl(tab.url)) {
-    throw new Error("Capture is not available on this page. Open an http(s) webpage and try again.");
-  }
+  await assertCaptureSupportedTab(tab.id!);
 
   await injectCaptureRuntime(tab.id!);
 }

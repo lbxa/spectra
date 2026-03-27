@@ -610,6 +610,15 @@ function resolveLocalLandmark(
   ) {
     return hostTag;
   }
+  if (hostTag === "div") {
+    const role = element.getAttribute("role");
+    if (role === "main") {
+      return "main";
+    }
+    if (role === "navigation") {
+      return "nav";
+    }
+  }
   if (hostTag === "div" && (element.className as string).toLowerCase?.().includes("hero")) {
     return "hero";
   }

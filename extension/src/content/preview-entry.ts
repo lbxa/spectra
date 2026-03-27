@@ -174,7 +174,7 @@ type PreviewSession = {
         void commitInsert(session.activeCandidate, session.component);
       }
     });
-    session.toolbar.mount(wrapperRect, session.relation);
+    session.toolbar.mount(inserted.wrapper, session.relation);
 
     session.watcher = watchPreviewRemoval(inserted.previewId, () => {
       overlay.showToast("Preview removed by page update.");

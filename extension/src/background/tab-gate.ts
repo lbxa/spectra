@@ -27,6 +27,23 @@ export async function assertPreviewEligibleTab(tabId: number): Promise<void> {
   assertPreviewEligibleUrl(pageUrl);
 }
 
+export async function assertCaptureSupportedTab(tabId: number): Promise<void> {
+  let pageUrl: string | undefined;
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => window.location.href
+    });
+    pageUrl = typeof result?.result === "string" ? result.result : undefined;
+  } catch {
+    pageUrl = undefined;
+  }
+
+  if (!isCaptureSupportedUrl(pageUrl)) {
+    throw new Error("Capture is not available on this page. Open an http(s) webpage and try again.");
+  }
+}
+
 export function isPreviewEligibleUrl(url: string | undefined): boolean {
   if (typeof url !== "string" || url.length === 0) {
     return false;
