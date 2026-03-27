@@ -20,7 +20,7 @@ export function mountOverlayRoot(): OverlayRoot {
   root.style.position = "fixed";
   root.style.inset = "0";
   root.style.pointerEvents = "none";
-  root.style.zIndex = "2147483647";
+  root.style.zIndex = "2147483646";
 
   const hoverOutline = createRectLayer("2px solid #4f8cff", "rgba(79,140,255,0.14)");
   const selectedOutline = createRectLayer("2px solid #35c759", "rgba(53,199,89,0.12)");

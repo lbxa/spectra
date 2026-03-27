@@ -1,0 +1,19 @@
+@layer theme, base, components, utilities;
+
+@theme inline {
+  --spacing-menu-min-w: 11.25rem;
+
+  --radius: 0.625rem;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+
+  --color-background: #ffffff;
+  --color-foreground: #0b3a67;
+  --color-border: #cfe2fb;
+  --color-surface-subtle: #eaf3ff;
+  --color-ring: #1a8cff;
+}
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);

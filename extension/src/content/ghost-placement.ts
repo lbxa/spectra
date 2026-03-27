@@ -9,7 +9,7 @@ export function updateGhostPlacement(
   ghost.style.left = `${Math.max(0, hostRect.left)}px`;
   ghost.style.width = `${Math.max(1, hostRect.width)}px`;
 
-  if (relation === "inside-end") {
+  if (relation === "inside") {
     const height = Math.min(120, Math.max(28, hostRect.height * 0.22));
     ghost.style.top = `${Math.max(0, hostRect.bottom - height)}px`;
     ghost.style.height = `${Math.max(24, height)}px`;

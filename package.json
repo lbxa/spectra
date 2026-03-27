@@ -3,13 +3,19 @@
   "private": true,
   "scripts": {
     "clean": "rm -rf dist",
-    "build:workers": "bun build extension/src/background.ts --outfile dist/background.js --target browser --format iife && bunx tsc -p tsconfig.content.json && bun build extension/src/preview-runtime.ts --outfile dist/preview-runtime.js --target browser --format iife",
-    "popup:build": "bunx vite build --config vite.popup.config.ts",
-    "popup:dev": "bunx vite build --config vite.popup.config.ts --watch",
-    "popup:hmr": "bunx vite --config vite.popup.config.ts --open /popup.dev.html",
-    "build": "bun run clean && bun run build:workers && bun run popup:build",
-    "typecheck": "bunx tsc -p tsconfig.background.json --noEmit && bunx tsc -p tsconfig.content.json --noEmit && bunx tsc -p tsconfig.popup.json --noEmit",
-    "dev": "bun run build && bun run typecheck"
+    "build:background": "bun build extension/src/background.ts --outfile dist/background.js --target browser --format iife",
+    "build:content": "bunx tsc -p tsconfig.content.json",
+    "build:preview": "bunx vite build --config vite.preview.config.ts",
+    "build:popup": "bunx vite build --config vite.popup.config.ts",
+    "build": "bun run clean && bun run build:background && bun run build:content && bun run build:preview && bun run build:popup",
+    "dev:popup:watch": "bunx vite build --config vite.popup.config.ts --watch",
+    "dev:popup:hmr": "bunx vite --config vite.popup.config.ts --open /popup.dev.html",
+    "typecheck:background": "bunx tsc -p tsconfig.background.json --noEmit",
+    "typecheck:content": "bunx tsc -p tsconfig.content.json --noEmit",
+    "typecheck:popup": "bunx tsc -p tsconfig.popup.json --noEmit",
+    "typecheck": "bun run typecheck:background && bun run typecheck:content && bun run typecheck:popup",
+    "check": "bun run build && bun run typecheck",
+    "dev": "bun run dev:popup:hmr"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.2.16",

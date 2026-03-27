@@ -7,6 +7,10 @@ export async function injectCaptureRuntime(tabId: number): Promise<void> {
 }
 
 export async function injectPreviewRuntime(tabId: number): Promise<void> {
+  await chrome.scripting.insertCSS({
+    target: { tabId },
+    files: ["preview-runtime.css"]
+  });
   await chrome.scripting.executeScript({
     target: { tabId },
     files: ["preview-runtime.js"],

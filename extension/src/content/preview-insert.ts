@@ -1,4 +1,4 @@
-import type { InsertionRelation } from "../lib/library/messages";
+import type { InsertionRelation, PreviewAlignment } from "../lib/library/messages";
 import type { SavedComponent } from "../lib/library/types";
 import { scopeCapturedCss } from "./css-scope";
 
@@ -22,7 +22,8 @@ export function removeExistingPreview(): void {
 export function insertPreview(
   host: HTMLElement,
   component: SavedComponent,
-  relation: InsertionRelation
+  relation: InsertionRelation,
+  alignment: PreviewAlignment
 ): InsertedPreview {
   removeExistingPreview();
 
@@ -33,7 +34,7 @@ export function insertPreview(
   wrapper.style.outline = "2px solid rgba(37,99,235,0.35)";
   wrapper.style.outlineOffset = "2px";
   wrapper.style.borderRadius = "8px";
-  wrapper.style.margin = relation === "inside-end" ? "8px 0 0" : "6px 0";
+  wrapper.style.margin = relation === "inside" ? "8px 0 0" : "6px 0";
 
   const toolbarSlot = document.createElement("div");
   toolbarSlot.setAttribute(TOOLBAR_ATTR, "true");
@@ -49,7 +50,8 @@ export function insertPreview(
   }
 
   wrapper.append(toolbarSlot, content);
-  applyInsertion(host, wrapper, relation);
+  const alignmentContainer = applyInsertion(host, wrapper, relation);
+  applyWrapperAlignment(wrapper, alignmentContainer, alignment);
 
   return {
     previewId,
@@ -58,16 +60,54 @@ export function insertPreview(
   };
 }
 
-function applyInsertion(host: HTMLElement, wrapper: HTMLDivElement, relation: InsertionRelation): void {
+function applyInsertion(host: HTMLElement, wrapper: HTMLDivElement, relation: InsertionRelation): HTMLElement {
   if (relation === "before" && host.parentElement) {
     host.parentElement.insertBefore(wrapper, host);
-    return;
+    return host.parentElement;
   }
 
   if (relation === "after" && host.parentElement) {
     host.parentElement.insertBefore(wrapper, host.nextSibling);
-    return;
+    return host.parentElement;
   }
 
   host.appendChild(wrapper);
+  return host;
+}
+
+function applyWrapperAlignment(
+  wrapper: HTMLDivElement,
+  container: HTMLElement,
+  alignment: PreviewAlignment
+): void {
+  wrapper.style.justifySelf = "";
+  wrapper.style.alignSelf = "";
+  wrapper.style.marginInlineStart = "0";
+  wrapper.style.marginInlineEnd = "0";
+
+  const style = window.getComputedStyle(container);
+  const display = style.display;
+
+  if (display === "grid" || display === "inline-grid") {
+    wrapper.style.justifySelf = alignment;
+    return;
+  }
+
+  if (display === "flex" || display === "inline-flex") {
+    if (style.flexDirection.startsWith("column")) {
+      wrapper.style.alignSelf =
+        alignment === "start" ? "flex-start" : alignment === "end" ? "flex-end" : "center";
+    }
+    return;
+  }
+
+  if (alignment === "center") {
+    wrapper.style.marginInlineStart = "auto";
+    wrapper.style.marginInlineEnd = "auto";
+    return;
+  }
+
+  if (alignment === "end") {
+    wrapper.style.marginInlineStart = "auto";
+  }
 }

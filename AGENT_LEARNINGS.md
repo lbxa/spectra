@@ -1,0 +1,1 @@
+- Preview toolbar dropdowns should inherit shadcn dropdown spacing defaults (avoid custom content/item padding overrides) and must set content z-index above overlay root (`#spectra-root` at `2147483647`), e.g. `z-[2147483648]`.

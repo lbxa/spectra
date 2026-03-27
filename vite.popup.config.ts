@@ -1,26 +1,8 @@
-import { defineConfig } from "vite";
-import react, { reactCompilerPreset } from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
-import babel from "@rolldown/plugin-babel";
+import { defineConfig, mergeConfig } from "vite";
+import { sharedViteConfig } from "./vite.shared.config";
 
-export default defineConfig({
-  plugins: [
-    react(),
-    babel({
-      presets: [reactCompilerPreset()]
-    }),
-    tailwindcss(),
-  ],
+export default mergeConfig(sharedViteConfig, defineConfig({
   publicDir: "public",
-  define: {
-    "process.env": {},
-    "process.env.NODE_ENV": JSON.stringify("production")
-  },
-  resolve: {
-    alias: {
-      "@": "/extension/src"
-    }
-  },
   build: {
     emptyOutDir: false,
     outDir: "dist",
@@ -37,8 +19,8 @@ export default defineConfig({
             return "popup.css";
           }
           return "assets/[name]-[hash][extname]";
-        }
-      }
-    }
-  }
-});
+        },
+      },
+    },
+  },
+}));

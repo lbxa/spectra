@@ -1,6 +1,5 @@
 import type {
   BeginTargetingMessage,
-  InsertionRelation,
   PreviewStatusMessage,
   SaveComponentResponse,
   StartPreviewMessage
@@ -59,7 +58,7 @@ export async function handlePreviewStatus(
     await updatePreviewSession(tabId, {
       status: "active",
       lastPreviewId: message.previewId,
-      lastRelation: message.relation as InsertionRelation,
+      lastRelation: message.relation,
       lastErrorCode: undefined
     });
   } else if (message.type === "PREVIEW_REMOVED") {

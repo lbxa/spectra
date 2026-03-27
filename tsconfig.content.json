@@ -1,9 +1,18 @@
 {
   "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": ["./extension/src/*"]
+    }
+  },
   "include": [
     "extension/src/content.ts",
     "extension/src/preview-runtime.ts",
     "extension/src/content/**/*.ts",
+    "extension/src/content/**/*.tsx",
+    "extension/src/content/**/*.d.ts",
     "extension/src/lib/preview/**/*.ts"
   ]
 }

@@ -33,7 +33,13 @@ export type SaveComponentResponse = {
 
 export type WorkerSessionState = "idle" | "starting" | "active" | "closed" | "error";
 
-export type InsertionRelation = "inside-end" | "before" | "after";
+export type InsertPosition = "before" | "inside" | "after";
+export type InsertionRelation = InsertPosition;
+export type PreviewAlignment = "start" | "center" | "end";
+export type PreviewPlacement = {
+  position: InsertPosition;
+  alignment: PreviewAlignment;
+};
 
 export type StartPreviewMessage = {
   type: "START_PREVIEW";

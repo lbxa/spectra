@@ -1,4 +1,4 @@
-import type { BeginTargetingMessage, InsertionRelation } from "../lib/library/messages";
+import type { BeginTargetingMessage, InsertionRelation, PreviewAlignment } from "../lib/library/messages";
 import type { SavedComponent } from "../lib/library/types";
 import { rankCandidates } from "./candidate-rank";
 import { scanCandidateContainers, type CandidateContainer } from "./candidate-scan";
@@ -19,6 +19,7 @@ type RuntimeWindow = Window & {
 type PreviewSession = {
   state: PreviewState;
   relation: InsertionRelation;
+  alignment: PreviewAlignment;
   component: SavedComponent | null;
   overlay: OverlayRoot | null;
   candidates: CandidateContainer[];
@@ -36,7 +37,8 @@ type PreviewSession = {
 
   const session: PreviewSession = {
     state: "idle",
-    relation: "inside-end",
+    relation: "inside",
+    alignment: "start",
     component: null,
     overlay: null,
     candidates: [],
@@ -111,7 +113,8 @@ type PreviewSession = {
     const overlay = ensureOverlay();
     session.component = message.component;
     session.state = "targeting";
-    session.relation = "inside-end";
+    session.relation = "inside";
+    session.alignment = "start";
     session.inserted = null;
     session.toolbar?.unmount();
     session.toolbar = null;
@@ -145,7 +148,7 @@ type PreviewSession = {
 
   async function commitInsert(candidate: CandidateContainer, component: SavedComponent): Promise<void> {
     const overlay = ensureOverlay();
-    const inserted = insertPreview(candidate.element, component, session.relation);
+    const inserted = insertPreview(candidate.element, component, session.relation, session.alignment);
     session.inserted = inserted;
     session.state = "inserted";
     overlay.hoverOutline.style.display = "none";
@@ -172,9 +175,17 @@ type PreviewSession = {
         }
         removeInsertedPreview(false);
         void commitInsert(session.activeCandidate, session.component);
+      },
+      onAlignmentChange: (alignment) => {
+        session.alignment = alignment;
+        if (!session.component || !session.activeCandidate) {
+          return;
+        }
+        removeInsertedPreview(false);
+        void commitInsert(session.activeCandidate, session.component);
       }
     });
-    session.toolbar.mount(inserted.wrapper, session.relation);
+    session.toolbar.mount(inserted.wrapper, session.relation, session.alignment);
 
     session.watcher = watchPreviewRemoval(inserted.previewId, () => {
       overlay.showToast("Preview removed by page update.");
