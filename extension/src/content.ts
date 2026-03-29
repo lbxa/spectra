@@ -1,5 +1,6 @@
 import { getCaptureFailureMessage } from "./content/capture-runtime-bridge";
 import { rewriteAssetUrls, sanitizeClonedTree } from "./content/capture-snapshot";
+import { createPickerUi, type PickerUiApi } from "./content/picker-ui/PickerUiRoot";
 
 (() => {
 type Bounds = {
@@ -43,8 +44,7 @@ type SaveComponentResponse = {
 type SelectionState = {
   overlay: HTMLDivElement;
   parentOverlay: HTMLDivElement;
-  shortcutsPanel: HTMLDivElement;
-  shiftShortcutKey: HTMLSpanElement;
+  ui: PickerUiApi;
   lastHoveredElement: Element | null;
   isDone: boolean;
 };
@@ -54,11 +54,6 @@ type PickerWindow = Window & {
 };
 
 const FRAME_WAIT_TIMEOUT_MS = 120;
-const TOAST_TRANSITION_MS = 220;
-const TOAST_VISIBLE_MS = 1400;
-const CAPTURE_FLASH_TRANSITION_MS = 250;
-const CAPTURE_PREVIEW_ENTER_MS = 320;
-const CAPTURE_PREVIEW_HOLD_MS = 2500;
 
 const STYLE_PROPERTY_ALLOWLIST = new Set<string>([
   "display",
@@ -300,18 +295,17 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
   const globalKey = "__componentPickerSelectionState__";
 
   if (pickerWindow[globalKey]) {
-    showToast("Capture mode is already active");
+    pickerWindow[globalKey]?.ui.showToast("Capture mode is already active");
     return;
   }
 
   const overlay = createOverlay();
   const parentOverlay = createParentOverlay();
-  const { panel: shortcutsPanel, shiftShortcutKey } = createShortcutsPanel();
+  const ui = createPickerUi();
   const state: SelectionState = {
     overlay,
     parentOverlay,
-    shortcutsPanel,
-    shiftShortcutKey,
+    ui,
     lastHoveredElement: null,
     isDone: false
   };
@@ -319,7 +313,7 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
   pickerWindow[globalKey] = state;
   document.documentElement.appendChild(overlay);
   document.documentElement.appendChild(parentOverlay);
-  document.documentElement.appendChild(shortcutsPanel);
+  const teardownCaptureInteractionGuards = installCaptureInteractionGuards(() => state.isDone);
 
   document.addEventListener("mousemove", onMouseMove, true);
   document.addEventListener("click", onClick, true);
@@ -359,6 +353,7 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
     await waitForPostCleanupPaint();
 
     const selectedTarget = resolveSelectedTarget(target, event.shiftKey);
+    clearDocumentSelection();
     const rect = selectedTarget.getBoundingClientRect();
     const snapshotHtml = buildStandaloneSnapshotHtml(selectedTarget);
     const payload: SaveComponentPayload = {
@@ -385,16 +380,18 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
       if (!response?.ok) {
         throw new Error(response?.error || "Capture failed");
       }
-      playCaptureFlash();
+      state.ui.showFlash();
       if (response.previewDataUrl) {
-        showCapturePreview(response.previewDataUrl);
+        state.ui.showPreview(response.previewDataUrl);
       }
       void playSound("jingle.wav");
-      showToast("Component captured");
+      state.ui.showToast("Component captured");
+      state.ui.destroyAfter(4000);
     } catch (error) {
       console.error("Failed to capture component:", error);
       void playSound("error.wav");
-      showToast(getCaptureFailureMessage(error));
+      state.ui.showToast(getCaptureFailureMessage(error));
+      state.ui.destroyAfter(2500);
     }
   }
 
@@ -402,19 +399,20 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
     if (event.key === "Escape") {
       state.isDone = true;
       cleanup();
-      showToast("Capture cancelled");
+      state.ui.showToast("Capture cancelled");
+      state.ui.destroyAfter(2500);
       return;
     }
     if (event.key === "Shift") {
       refreshParentOverlay(true);
-      setShiftShortcutActive(shiftShortcutKey, true);
+      state.ui.setShiftActive(true);
     }
   }
 
   function onKeyUp(event: KeyboardEvent): void {
     if (event.key === "Shift") {
       refreshParentOverlay(false);
-      setShiftShortcutActive(shiftShortcutKey, false);
+      state.ui.setShiftActive(false);
     }
   }
 
@@ -423,9 +421,10 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
     document.removeEventListener("click", onClick, true);
     document.removeEventListener("keydown", onKeyDown, true);
     document.removeEventListener("keyup", onKeyUp, true);
+    teardownCaptureInteractionGuards();
     overlay.remove();
     parentOverlay.remove();
-    shortcutsPanel.remove();
+    state.ui.setShortcutsVisible(false);
     delete pickerWindow[globalKey];
   }
 
@@ -473,6 +472,43 @@ function resolveSelectedTarget(target: Element, isShiftHeld: boolean): Element {
 
 function resolveParentTarget(target: Element): Element | null {
   return target.parentElement;
+}
+
+function installCaptureInteractionGuards(isDone: () => boolean): () => void {
+  const onPointerAction = (event: Event): void => {
+    if (isDone()) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+  };
+  const onSelectStart = (event: Event): void => {
+    if (isDone()) {
+      return;
+    }
+    event.preventDefault();
+  };
+  const guardEvents: Array<keyof DocumentEventMap> = [
+    "mousedown",
+    "mouseup",
+    "dragstart",
+    "contextmenu"
+  ];
+  for (const eventName of guardEvents) {
+    document.addEventListener(eventName, onPointerAction, true);
+  }
+  document.addEventListener("selectstart", onSelectStart, true);
+  return () => {
+    for (const eventName of guardEvents) {
+      document.removeEventListener(eventName, onPointerAction, true);
+    }
+    document.removeEventListener("selectstart", onSelectStart, true);
+  };
+}
+
+function clearDocumentSelection(): void {
+  window.getSelection()?.removeAllRanges();
 }
 
 function buildStandaloneSnapshotHtml(target: Element): string {
@@ -705,197 +741,6 @@ function createParentOverlay(): HTMLDivElement {
   overlay.style.transition = "all 0.03s linear";
   overlay.style.display = "none";
   return overlay;
-}
-
-function createShortcutsPanel(): { panel: HTMLDivElement; shiftShortcutKey: HTMLSpanElement } {
-  const panel = document.createElement("div");
-  panel.setAttribute("data-component-picker-shortcuts", "true");
-  panel.style.position = "fixed";
-  panel.style.right = "12px";
-  panel.style.bottom = "12px";
-  panel.style.display = "grid";
-  panel.style.gap = "6px";
-  panel.style.padding = "10px 12px";
-  panel.style.borderRadius = "10px";
-  panel.style.border = "1px solid rgba(148, 163, 184, 0.28)";
-  panel.style.background = "rgba(17, 24, 39, 0.94)";
-  panel.style.color = "#f8fafc";
-  panel.style.font = "12px/1.35 -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
-  panel.style.boxShadow = "0 8px 20px rgba(0, 0, 0, 0.25)";
-  panel.style.zIndex = "2147483647";
-  panel.style.pointerEvents = "none";
-  panel.style.userSelect = "none";
-
-  const title = document.createElement("div");
-  title.textContent = "Keyboard shortcuts";
-  title.style.fontSize = "11px";
-  title.style.fontWeight = "600";
-  title.style.letterSpacing = "0.02em";
-  title.style.opacity = "0.9";
-
-  const shortcutsGrid = document.createElement("div");
-  shortcutsGrid.style.display = "grid";
-  shortcutsGrid.style.gridTemplateColumns = "max-content 1fr";
-  shortcutsGrid.style.columnGap = "8px";
-  shortcutsGrid.style.rowGap = "6px";
-  shortcutsGrid.style.alignItems = "center";
-
-  const escapeRow = createShortcutRow("Esc", "Exit capture");
-  const shiftRow = createShortcutRow("Shift", "Select parent");
-  const shiftShortcutKey = shiftRow.key;
-
-  shortcutsGrid.append(escapeRow.key, escapeRow.label, shiftRow.key, shiftRow.label);
-  panel.append(title, shortcutsGrid);
-  return { panel, shiftShortcutKey };
-}
-
-function createShortcutRow(
-  keyLabel: string,
-  description: string
-): { key: HTMLSpanElement; label: HTMLSpanElement } {
-  const key = document.createElement("span");
-  key.textContent = keyLabel;
-  key.style.padding = "2px 7px";
-  key.style.borderRadius = "6px";
-  key.style.border = "1px solid rgba(148, 163, 184, 0.4)";
-  key.style.background = "rgba(51, 65, 85, 0.35)";
-  key.style.fontSize = "11px";
-  key.style.fontWeight = "600";
-  key.style.color = "#e2e8f0";
-  key.style.transition = "border-color 120ms ease, color 120ms ease, background 120ms ease";
-
-  const label = document.createElement("span");
-  label.textContent = description;
-  label.style.fontSize = "11px";
-  label.style.opacity = "0.9";
-
-  return { key, label };
-}
-
-function setShiftShortcutActive(shiftShortcutKey: HTMLSpanElement, isActive: boolean): void {
-  if (isActive) {
-    shiftShortcutKey.style.borderColor = "rgba(217, 70, 239, 0.9)";
-    shiftShortcutKey.style.background = "rgba(217, 70, 239, 0.22)";
-    shiftShortcutKey.style.color = "#f5d0fe";
-    return;
-  }
-  shiftShortcutKey.style.borderColor = "rgba(148, 163, 184, 0.4)";
-  shiftShortcutKey.style.background = "rgba(51, 65, 85, 0.35)";
-  shiftShortcutKey.style.color = "#e2e8f0";
-}
-
-function showToast(message: string): void {
-  const existing = document.querySelector("[data-component-picker-toast='true']");
-  if (existing instanceof HTMLElement) {
-    existing.remove();
-  }
-
-  const toast = document.createElement("div");
-  toast.setAttribute("data-component-picker-toast", "true");
-  toast.textContent = message;
-  toast.style.position = "fixed";
-  toast.style.left = "50%";
-  toast.style.top = "16px";
-  toast.style.transform = "translateX(-50%) translateY(-14px)";
-  toast.style.opacity = "0";
-  toast.style.transition = `transform ${TOAST_TRANSITION_MS}ms ease, opacity ${TOAST_TRANSITION_MS}ms ease`;
-  toast.style.zIndex = "2147483647";
-  toast.style.background = "rgba(17, 24, 39, 0.92)";
-  toast.style.color = "#f9fafb";
-  toast.style.padding = "8px 12px";
-  toast.style.borderRadius = "8px";
-  toast.style.whiteSpace = "nowrap";
-  toast.style.maxWidth = "calc(100vw - 24px)";
-  toast.style.textOverflow = "ellipsis";
-  toast.style.overflow = "hidden";
-  toast.style.font = "12px/1.4 -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
-  toast.style.pointerEvents = "none";
-  toast.style.boxShadow = "0 4px 10px rgba(0, 0, 0, 0.25)";
-  document.documentElement.appendChild(toast);
-  window.requestAnimationFrame(() => {
-    toast.style.transform = "translateX(-50%) translateY(0)";
-    toast.style.opacity = "1";
-  });
-
-  window.setTimeout(() => {
-    if (!toast.isConnected) {
-      return;
-    }
-    toast.style.transform = "translateX(-50%) translateY(-10px)";
-    toast.style.opacity = "0";
-    window.setTimeout(() => {
-      toast.remove();
-    }, TOAST_TRANSITION_MS);
-  }, TOAST_VISIBLE_MS);
-}
-
-function playCaptureFlash(): void {
-  const flash = document.createElement("div");
-  flash.setAttribute("data-component-picker-flash", "true");
-  flash.style.position = "fixed";
-  flash.style.inset = "0";
-  flash.style.pointerEvents = "none";
-  flash.style.zIndex = "2147483647";
-  flash.style.background = "#fff";
-  flash.style.opacity = "0.82";
-  flash.style.transition = `opacity ${CAPTURE_FLASH_TRANSITION_MS}ms ease-out`;
-  document.documentElement.appendChild(flash);
-
-  window.requestAnimationFrame(() => {
-    flash.style.opacity = "0";
-  });
-
-  const removeFlash = (): void => {
-    flash.removeEventListener("transitionend", removeFlash);
-    flash.remove();
-  };
-  flash.addEventListener("transitionend", removeFlash, { once: true });
-  window.setTimeout(removeFlash, CAPTURE_FLASH_TRANSITION_MS + 100);
-}
-
-function showCapturePreview(dataUrl: string): void {
-  const existing = document.querySelector("[data-component-picker-capture-preview='true']");
-  if (existing instanceof HTMLElement) {
-    existing.remove();
-  }
-
-  const preview = document.createElement("img");
-  preview.setAttribute("data-component-picker-capture-preview", "true");
-  preview.src = dataUrl;
-  preview.alt = "Captured screenshot preview";
-  preview.style.position = "fixed";
-  preview.style.top = "16px";
-  preview.style.right = "16px";
-  preview.style.width = "120px";
-  preview.style.height = "auto";
-  preview.style.maxHeight = "120px";
-  preview.style.objectFit = "cover";
-  preview.style.borderRadius = "10px";
-  preview.style.border = "1px solid rgba(148, 163, 184, 0.35)";
-  preview.style.boxShadow = "0 14px 28px rgba(0, 0, 0, 0.28)";
-  preview.style.background = "rgba(15, 23, 42, 0.8)";
-  preview.style.pointerEvents = "none";
-  preview.style.zIndex = "2147483647";
-  preview.style.opacity = "0";
-  preview.style.transform = "translateX(calc(100% + 20px))";
-  preview.style.transition = `transform ${CAPTURE_PREVIEW_ENTER_MS}ms ease, opacity ${CAPTURE_PREVIEW_ENTER_MS}ms ease`;
-
-  document.documentElement.appendChild(preview);
-  window.requestAnimationFrame(() => {
-    preview.style.transform = "translateX(0)";
-    preview.style.opacity = "1";
-  });
-
-  window.setTimeout(() => {
-    if (!preview.isConnected) {
-      return;
-    }
-    preview.style.transform = "translateX(calc(100% + 20px))";
-    preview.style.opacity = "0";
-    window.setTimeout(() => {
-      preview.remove();
-    }, CAPTURE_PREVIEW_ENTER_MS);
-  }, CAPTURE_PREVIEW_HOLD_MS);
 }
 
 async function playSound(fileName: "click.wav" | "jingle.wav" | "error.wav"): Promise<void> {

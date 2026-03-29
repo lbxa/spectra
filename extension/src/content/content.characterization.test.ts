@@ -40,8 +40,14 @@ async function flushCaptureWork(): Promise<void> {
   await Promise.resolve();
 }
 
+async function advanceAndFlush(ms: number): Promise<void> {
+  await vi.advanceTimersByTimeAsync(ms);
+  await Promise.resolve();
+}
+
 function removeRuntimeArtifacts(): void {
   const selectors = [
+    "[data-component-picker-ui-root='true']",
     "[data-component-picker-overlay='true']",
     "[data-component-picker-parent-overlay='true']",
     "[data-component-picker-shortcuts='true']",
@@ -64,6 +70,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.clearAllTimers();
   removeRuntimeArtifacts();
   vi.useRealTimers();
 });
@@ -113,6 +120,32 @@ describe("content.ts characterization", () => {
 
     await loadContentRuntime();
 
+    const suppressibleEvents: Event[] = [
+      new MouseEvent("mousedown", { bubbles: true, cancelable: true }),
+      new MouseEvent("mouseup", { bubbles: true, cancelable: true }),
+      new Event("dragstart", { bubbles: true, cancelable: true }),
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+      new Event("selectstart", { bubbles: true, cancelable: true })
+    ];
+    for (const event of suppressibleEvents) {
+      child.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+    }
+
+    const textNode = child.firstChild;
+    if (!(textNode instanceof Text)) {
+      throw new Error("Expected child text node");
+    }
+    const selectedRange = document.createRange();
+    selectedRange.selectNodeContents(textNode);
+    const selection = window.getSelection();
+    if (!selection) {
+      throw new Error("Expected browser selection API");
+    }
+    selection.removeAllRanges();
+    selection.addRange(selectedRange);
+    expect(selection.rangeCount).toBeGreaterThan(0);
+
     const click = new MouseEvent("click", { bubbles: true, cancelable: true });
     child.dispatchEvent(click);
     await flushCaptureWork();
@@ -133,8 +166,44 @@ describe("content.ts characterization", () => {
         })
       })
     );
+    expect(window.getSelection()?.rangeCount ?? 0).toBe(0);
     expect(document.querySelector("[data-component-picker-toast='true']")?.textContent).toContain("Component captured");
     expect(document.querySelector("[data-component-picker-capture-preview='true']")).not.toBeNull();
+    expect(document.querySelector("[data-component-picker-flash='true']")).not.toBeNull();
+
+    const postCaptureMouseDown = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    child.dispatchEvent(postCaptureMouseDown);
+    expect(postCaptureMouseDown.defaultPrevented).toBe(false);
+  });
+
+  it("removes success toast after visible and transition durations", async () => {
+    const { child } = createCaptureFixture();
+    const runtime = getChromeRuntime();
+    runtime.sendMessage = vi.fn(async () => ({ ok: true }));
+
+    await loadContentRuntime();
+
+    child.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushCaptureWork();
+    expect(document.querySelector("[data-component-picker-toast='true']")).not.toBeNull();
+
+    await advanceAndFlush(2200);
+    expect(document.querySelector("[data-component-picker-toast='true']")).toBeNull();
+  });
+
+  it("removes preview thumbnail after its hold period", async () => {
+    const { child } = createCaptureFixture();
+    const runtime = getChromeRuntime();
+    runtime.sendMessage = vi.fn(async () => ({ ok: true, previewDataUrl: "data:image/png;base64,preview" }));
+
+    await loadContentRuntime();
+
+    child.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushCaptureWork();
+    expect(document.querySelector("[data-component-picker-capture-preview='true']")).not.toBeNull();
+
+    await advanceAndFlush(3600);
+    expect(document.querySelector("[data-component-picker-capture-preview='true']")).toBeNull();
   });
 
   it("uses the parent target when shift-clicking", async () => {
@@ -195,5 +264,25 @@ describe("content.ts characterization", () => {
 
     document.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
     expect(parentOverlay.style.display).toBe("none");
+  });
+
+  it("updates the shift shortcut key visual state", async () => {
+    await loadContentRuntime();
+
+    const panel = document.querySelector("[data-component-picker-shortcuts='true']");
+    if (!(panel instanceof HTMLElement)) {
+      throw new Error("Expected shortcuts panel");
+    }
+
+    const shiftKey = Array.from(panel.querySelectorAll("span")).find((node) => node.textContent === "Shift");
+    if (!(shiftKey instanceof HTMLElement)) {
+      throw new Error("Expected Shift shortcut key");
+    }
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", bubbles: true }));
+    expect(shiftKey.style.borderColor).toContain("217, 70, 239");
+
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
+    expect(shiftKey.style.borderColor).toContain("148, 163, 184");
   });
 });
