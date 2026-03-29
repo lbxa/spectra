@@ -28,8 +28,9 @@ import "@xyflow/react/dist/style.css";
 
 type ComponentCanvasProps = {
   component: SavedComponent;
+  activeCollectionId: string | null;
   isPreviewStarting: boolean;
-  onStartPreview: (component: SavedComponent) => void;
+  onStartPreview: (component: SavedComponent, activeCollectionId: string | null) => void;
   onClose: () => void;
   className?: string;
 };
@@ -44,13 +45,14 @@ type ComponentFlowNode = Node<ComponentNodeData, "component-card">;
 const INITIAL_NODE_POSITION = { x: 180, y: 130 };
 const MIN_CANVAS_ZOOM = 0.1;
 const MAX_CANVAS_ZOOM = 4;
-const FIT_VIEW_OPTIONS = {
+const MAX_AUTO_FIT_ZOOM = 1;
+const FIT_DOWN_ONLY_VIEW_OPTIONS = {
   padding: 0.2,
   minZoom: MIN_CANVAS_ZOOM,
-  maxZoom: MAX_CANVAS_ZOOM
+  maxZoom: MAX_AUTO_FIT_ZOOM
 } as const;
 const FIT_VIEW_ANIMATION_OPTIONS = {
-  ...FIT_VIEW_OPTIONS,
+  ...FIT_DOWN_ONLY_VIEW_OPTIONS,
   duration: 200
 } as const;
 
@@ -60,6 +62,7 @@ const nodeTypes = {
 
 export function ComponentCanvas({
   component,
+  activeCollectionId,
   isPreviewStarting,
   onStartPreview,
   onClose,
@@ -120,7 +123,7 @@ export function ComponentCanvas({
         nodeTypes={nodeTypes}
         proOptions={{ hideAttribution: true }}
         fitView
-        fitViewOptions={FIT_VIEW_OPTIONS}
+        fitViewOptions={FIT_DOWN_ONLY_VIEW_OPTIONS}
         minZoom={MIN_CANVAS_ZOOM}
         maxZoom={MAX_CANVAS_ZOOM}
         panOnDrag
@@ -146,7 +149,7 @@ export function ComponentCanvas({
           onCopyRaw={handleCopyRaw}
           isPreviewStarting={isPreviewStarting}
           onStartPreview={() => {
-            onStartPreview(component);
+            onStartPreview(component, activeCollectionId);
           }}
         />
         <Panel position="top-right" className="m-3">
@@ -321,10 +324,17 @@ function TopLeftMetadataCard({ component }: { component: SavedComponent }) {
   return (
     <Panel position="top-left" className="m-3 max-w-code-max-h">
       <div className="grid gap-2 rounded-lg border border-border-strong/80 bg-background/92 p-2.5 shadow-[0_14px_42px_rgba(11,58,103,0.22)] backdrop-blur-md">
-        <p className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+        <p className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase truncate whitespace-nowrap max-w-full" title={component.title || "Untitled component"}>
           {component.title || "Untitled component"}
         </p>
-        <p className="truncate text-[11px] text-muted-foreground">{hostnameFromUrl(component.url)}</p>
+        <a
+          href={component.url}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="truncate text-[11px] text-muted-foreground hover:text-foreground hover:underline"
+        >
+          {hostnameFromUrl(component.url)}
+        </a>
         <p className="text-[11px] text-muted-foreground">{formatCapturedAt(component.capturedAt)}</p>
       </div>
     </Panel>

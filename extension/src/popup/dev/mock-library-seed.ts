@@ -81,6 +81,13 @@ function createMockFixtures(): SavedComponent[] {
       html: variant.html,
       cssText: "",
       screenshotDataUrl: FALLBACK_THUMBNAIL,
+      thumbnailMeta: {
+        originalWidth: 400,
+        originalHeight: 300,
+        aspectRatio: 4 / 3,
+        dominantColor: "#8aa8c7",
+        blurredBackdropDataUrl: FALLBACK_THUMBNAIL
+      },
       sourceHostSignature: {
         landmark: "unknown",
         hostTag: "div",

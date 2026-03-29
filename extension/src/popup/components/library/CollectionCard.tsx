@@ -47,9 +47,14 @@ export function CollectionCard({
     if (!shouldFocusNameInput || !isSelected) {
       return;
     }
-    nameInputRef.current?.focus();
-    nameInputRef.current?.select();
-    onNameFocusHandled();
+    const animationFrameId = window.requestAnimationFrame(() => {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select();
+      onNameFocusHandled();
+    });
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+    };
   }, [isSelected, onNameFocusHandled, shouldFocusNameInput]);
 
   return (

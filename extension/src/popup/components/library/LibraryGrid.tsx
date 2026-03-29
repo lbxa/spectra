@@ -10,9 +10,10 @@ type LibraryGridProps = {
   collection: Collection | null;
   collections: Collection[];
   components: SavedComponent[];
+  activeCollectionId: string | null;
   activeComponent: SavedComponent | null;
   isPreviewStarting: boolean;
-  onStartPreview: (component: SavedComponent) => void;
+  onStartPreview: (component: SavedComponent, activeCollectionId: string | null) => void;
   onOpenDetails: (componentId: string) => void;
   onCloseDetails: () => void;
   onMoveComponentToCollection: (componentId: string, targetCollectionId: string) => void;
@@ -24,6 +25,7 @@ export function LibraryGrid({
   collection,
   collections,
   components,
+  activeCollectionId,
   activeComponent,
   isPreviewStarting,
   onStartPreview,
@@ -121,6 +123,7 @@ export function LibraryGrid({
       {activeComponent ? (
         <ComponentCanvas
           component={activeComponent}
+          activeCollectionId={activeCollectionId}
           isPreviewStarting={isPreviewStarting}
           onStartPreview={onStartPreview}
           onClose={onCloseDetails}

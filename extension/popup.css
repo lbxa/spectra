@@ -43,6 +43,8 @@
   --color-muted-foreground: #4f7094;
   --color-ring: #1a8cff;
   --color-overlay: rgba(11, 58, 103, 0.5);
+  --color-card-glass: rgba(255, 255, 255, 0.72);
+  --color-card-glass-border: rgba(255, 255, 255, 0.45);
 
   --color-destructive: #dc2626;
   --color-destructive-hover: #b91c1c;
@@ -60,5 +62,13 @@
   #root {
     min-height: var(--spacing-popup-h);
     overflow-x: hidden;
+  }
+
+  .bg-canvas-grid {
+    --grid-cell: 6px;
+    --grid-a: #ffffff;
+    --grid-b: #e9ecf0;
+    background-image: repeating-conic-gradient(var(--grid-b) 0% 25%, var(--grid-a) 0% 50%);
+    background-size: calc(var(--grid-cell) * 2) calc(var(--grid-cell) * 2);
   }
 }

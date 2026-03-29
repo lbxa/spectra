@@ -40,24 +40,29 @@ export function ComponentCard({
   const [isMovePickerOpen, setIsMovePickerOpen] = useState(false);
   const hasMoveOptions = collections.length > 0;
   const isInCollection = (collectionId: string): boolean => component.collectionIds.includes(collectionId);
+  const screenshotSrc = component.screenshotDataUrl || FALLBACK_THUMBNAIL;
 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <Card className="overflow-hidden rounded-md shadow-none">
+        <Card className="overflow-hidden rounded-md border border-border bg-(--color-card-glass) backdrop-blur-sm">
           <CardContent className="p-0">
-            <img
-              className="block h-card-thumb-h w-full border-b border-border bg-surface object-cover"
-              alt={component.title || "Captured component"}
-              src={component.screenshotDataUrl || FALLBACK_THUMBNAIL}
-            />
-            <div className="grid gap-1.5 p-2">
+            <div className="relative aspect-4/3 overflow-hidden border-b border-border/70 bg-canvas-grid">
+              <div className="absolute inset-0 flex items-center justify-center p-2">
+                <img
+                  className="block h-auto w-auto max-h-full max-w-full rounded-sm"
+                  alt={component.title || "Captured component"}
+                  src={screenshotSrc}
+                />
+              </div>
+            </div>
+            <div className="grid gap-1 p-2">
               <h3 className="truncate text-xs font-semibold text-foreground">
                 {component.title || "Untitled component"}
               </h3>
               <p className="truncate text-[11px] text-muted-foreground">{hostnameFromUrl(component.url)}</p>
-              <p className="text-[10px] text-muted-foreground">{formatCapturedAt(component.capturedAt)}</p>
-              <div className="mt-0.5 flex flex-wrap justify-end gap-1.5">
+              <p className="text-[10px] text-muted-foreground/70">{formatCapturedAt(component.capturedAt)}</p>
+              <div className="mt-1 flex flex-wrap justify-end gap-1.5">
                 <ComponentActionButton
                   ariaLabel="Open details"
                   onClick={() => {

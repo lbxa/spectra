@@ -1,10 +1,12 @@
 import type { InsertionRelation, WorkerSessionState } from "../lib/library/messages";
 
 const SESSION_KEY = "spectra.preview.sessions.v1";
+const CAPTURE_TARGET_KEY = "spectra.capture.targets.v1";
 
 export type WorkerPreviewSession = {
   tabId: number;
   componentId: string;
+  activeCollectionId: string;
   status: WorkerSessionState;
   lastPreviewId?: string;
   lastRelation?: InsertionRelation;
@@ -13,6 +15,7 @@ export type WorkerPreviewSession = {
 };
 
 type SessionRecord = Record<string, WorkerPreviewSession>;
+type CaptureTargetRecord = Record<string, string>;
 
 export async function getPreviewSession(tabId: number): Promise<WorkerPreviewSession | null> {
   const sessions = await readSessions();
@@ -52,6 +55,24 @@ export async function clearPreviewSession(tabId: number): Promise<void> {
   await writeSessions(sessions);
 }
 
+export async function setCaptureTargetCollectionId(tabId: number, collectionId: string): Promise<void> {
+  const targets = await readCaptureTargets();
+  targets[String(tabId)] = collectionId;
+  await writeCaptureTargets(targets);
+}
+
+export async function getCaptureTargetCollectionId(tabId: number): Promise<string | null> {
+  const targets = await readCaptureTargets();
+  const target = targets[String(tabId)];
+  return typeof target === "string" && target.length > 0 ? target : null;
+}
+
+export async function clearCaptureTargetCollectionId(tabId: number): Promise<void> {
+  const targets = await readCaptureTargets();
+  delete targets[String(tabId)];
+  await writeCaptureTargets(targets);
+}
+
 async function readSessions(): Promise<SessionRecord> {
   const storage = await chrome.storage.session.get([SESSION_KEY]);
   const candidate = storage[SESSION_KEY];
@@ -63,4 +84,17 @@ async function readSessions(): Promise<SessionRecord> {
 
 async function writeSessions(sessions: SessionRecord): Promise<void> {
   await chrome.storage.session.set({ [SESSION_KEY]: sessions });
+}
+
+async function readCaptureTargets(): Promise<CaptureTargetRecord> {
+  const storage = await chrome.storage.session.get([CAPTURE_TARGET_KEY]);
+  const candidate = storage[CAPTURE_TARGET_KEY];
+  if (!candidate || typeof candidate !== "object") {
+    return {};
+  }
+  return candidate as CaptureTargetRecord;
+}
+
+async function writeCaptureTargets(targets: CaptureTargetRecord): Promise<void> {
+  await chrome.storage.session.set({ [CAPTURE_TARGET_KEY]: targets });
 }

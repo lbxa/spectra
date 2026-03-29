@@ -7,7 +7,8 @@ import {
   type HostSignature,
   type LibraryMeta,
   type LibraryRepository,
-  type SavedComponent
+  type SavedComponent,
+  type ThumbnailMeta
 } from "./types";
 
 const DATABASE_NAME = "spectra-library";
@@ -608,6 +609,7 @@ function normalizeComponentInput(input: SavedComponent, defaultCollectionId: str
     html: input.html,
     cssText: input.cssText,
     screenshotDataUrl: input.screenshotDataUrl,
+    thumbnailMeta: normalizeThumbnailMeta(input.thumbnailMeta),
     sourceHostSignature: normalizeHostSignature(input.sourceHostSignature)
   };
 }
@@ -672,6 +674,41 @@ function normalizeHostSignature(value: HostSignature | undefined): HostSignature
     ancestorTags,
     nearbyHeading: typeof value.nearbyHeading === "string" && value.nearbyHeading ? value.nearbyHeading : undefined
   };
+}
+
+function normalizeThumbnailMeta(value: ThumbnailMeta | undefined): ThumbnailMeta | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const originalWidth = toPositiveInteger(value.originalWidth);
+  const originalHeight = toPositiveInteger(value.originalHeight);
+  const aspectRatio = Number.isFinite(value.aspectRatio) && value.aspectRatio > 0
+    ? value.aspectRatio
+    : originalWidth / originalHeight;
+  const dominantColor = typeof value.dominantColor === "string" ? value.dominantColor.trim() : "";
+  const blurredBackdropDataUrl =
+    typeof value.blurredBackdropDataUrl === "string" ? value.blurredBackdropDataUrl.trim() : "";
+
+  if (!originalWidth || !originalHeight || !dominantColor || !blurredBackdropDataUrl) {
+    return undefined;
+  }
+
+  return {
+    originalWidth,
+    originalHeight,
+    aspectRatio,
+    dominantColor,
+    blurredBackdropDataUrl
+  };
+}
+
+function toPositiveInteger(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 0;
+  }
+  const normalized = Math.floor(value);
+  return normalized > 0 ? normalized : 0;
 }
 
 function createUnknownHostSignature(): HostSignature {

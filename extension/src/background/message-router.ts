@@ -12,6 +12,9 @@ export async function handleStartPreview(message: StartPreviewMessage): Promise<
   if (!message.component?.id) {
     return { ok: false, error: "Missing component payload." };
   }
+  if (typeof message.activeCollectionId !== "string" || message.activeCollectionId.trim().length === 0) {
+    return { ok: false, error: "Missing active collection id." };
+  }
 
   try {
     const tab = await requireActiveTab();
@@ -20,6 +23,7 @@ export async function handleStartPreview(message: StartPreviewMessage): Promise<
     await setPreviewSession({
       tabId: tab.id!,
       componentId: message.component.id,
+      activeCollectionId: message.activeCollectionId,
       status: "starting",
       updatedAt: new Date().toISOString()
     });

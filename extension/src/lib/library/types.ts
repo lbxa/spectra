@@ -21,6 +21,14 @@ export type HostSignature = {
   nearbyHeading?: string;
 };
 
+export type ThumbnailMeta = {
+  originalWidth: number;
+  originalHeight: number;
+  aspectRatio: number;
+  dominantColor: string;
+  blurredBackdropDataUrl: string;
+};
+
 export type SavedComponent = {
   id: string;
   collectionIds: string[];
@@ -30,6 +38,7 @@ export type SavedComponent = {
   html: string;
   cssText: string;
   screenshotDataUrl: string;
+  thumbnailMeta?: ThumbnailMeta;
   sourceHostSignature: HostSignature;
 };
 

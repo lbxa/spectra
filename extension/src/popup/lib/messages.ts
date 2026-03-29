@@ -5,9 +5,10 @@ import type {
 } from "@/lib/library/messages";
 import type { SavedComponent } from "@/lib/library/types";
 
-export async function startCapture(): Promise<void> {
+export async function startCapture(activeCollectionId: string): Promise<void> {
   const response = (await chrome.runtime.sendMessage({
-    type: "START_CAPTURE"
+    type: "START_CAPTURE",
+    activeCollectionId
   } satisfies StartCaptureMessage)) as SaveComponentResponse;
 
   if (!response?.ok) {
@@ -15,9 +16,10 @@ export async function startCapture(): Promise<void> {
   }
 }
 
-export async function startPreview(component: SavedComponent): Promise<void> {
+export async function startPreview(component: SavedComponent, activeCollectionId: string): Promise<void> {
   const response = (await chrome.runtime.sendMessage({
     type: "START_PREVIEW",
+    activeCollectionId,
     component
   } satisfies StartPreviewMessage)) as SaveComponentResponse;
 
@@ -48,8 +50,13 @@ export function getCaptureStartErrorMessage(error: unknown): string {
 }
 
 export function getPreviewStartErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.includes("localhost")) {
-    return "Preview is only available on localhost and 127.0.0.1.";
+  if (
+    error instanceof Error &&
+    (error.message.includes("Preview is unavailable on this page") ||
+      error.message.includes("Cannot access a chrome:// URL") ||
+      error.message.includes("Cannot access contents of url"))
+  ) {
+    return "Preview is unavailable on this page. Open an http(s) page.";
   }
   return "Failed to start preview.";
 }

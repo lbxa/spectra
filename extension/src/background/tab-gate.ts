@@ -6,9 +6,12 @@ export async function requireActiveTab(): Promise<chrome.tabs.Tab> {
   return tab;
 }
 
+const PREVIEW_UNSUPPORTED_PAGE_ERROR =
+  "Preview is unavailable on this page. Open an http(s) page and try again.";
+
 export function assertPreviewEligibleUrl(url: string | undefined): void {
   if (!isPreviewEligibleUrl(url)) {
-    throw new Error("Preview is only available on localhost and 127.0.0.1 pages.");
+    throw new Error(PREVIEW_UNSUPPORTED_PAGE_ERROR);
   }
 }
 
@@ -45,19 +48,7 @@ export async function assertCaptureSupportedTab(tabId: number): Promise<void> {
 }
 
 export function isPreviewEligibleUrl(url: string | undefined): boolean {
-  if (typeof url !== "string" || url.length === 0) {
-    return false;
-  }
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return false;
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return false;
-  }
-  return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+  return isCaptureSupportedUrl(url);
 }
 
 export function isCaptureSupportedUrl(url: string | undefined): boolean {

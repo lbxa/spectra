@@ -19,6 +19,7 @@ export type SaveComponentPayload = {
 
 export type StartCaptureMessage = {
   type: "START_CAPTURE";
+  activeCollectionId: string;
 };
 
 export type SaveComponentMessage = {
@@ -43,6 +44,7 @@ export type PreviewPlacement = {
 
 export type StartPreviewMessage = {
   type: "START_PREVIEW";
+  activeCollectionId: string;
   component: SavedComponent;
 };
 
@@ -110,7 +112,7 @@ export function isIncomingRuntimeMessage(message: unknown): message is IncomingR
   }
 
   if (message.type === "START_CAPTURE") {
-    return true;
+    return "activeCollectionId" in message && typeof message.activeCollectionId === "string";
   }
 
   if (message.type === "SAVE_COMPONENT") {
@@ -118,7 +120,11 @@ export function isIncomingRuntimeMessage(message: unknown): message is IncomingR
   }
 
   if (message.type === "START_PREVIEW") {
-    return "component" in message;
+    return (
+      "component" in message &&
+      "activeCollectionId" in message &&
+      typeof message.activeCollectionId === "string"
+    );
   }
 
   return (

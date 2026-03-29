@@ -8,8 +8,14 @@ import {
 import { libraryRepository } from "./lib/library/repository";
 import { INBOX_COLLECTION_ID, type SavedComponent } from "./lib/library/types";
 import { injectCaptureRuntime } from "./background/injector";
+import { processComponentThumbnail } from "./background/image-processing";
 import { handlePreviewStatus, handleStartPreview } from "./background/message-router";
-import { clearPreviewSession } from "./background/session-store";
+import {
+  clearCaptureTargetCollectionId,
+  clearPreviewSession,
+  getCaptureTargetCollectionId,
+  setCaptureTargetCollectionId
+} from "./background/session-store";
 import { assertCaptureSupportedTab, requireActiveTab } from "./background/tab-gate";
 
 type Bounds = {
@@ -37,7 +43,14 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   }
 
   if (message.type === "START_CAPTURE") {
-    injectContentScript()
+    if (!message.activeCollectionId?.trim()) {
+      sendResponse({
+        ok: false,
+        error: "Missing active collection id."
+      } satisfies SaveComponentResponse);
+      return false;
+    }
+    injectContentScript(message.activeCollectionId)
       .then(() => sendResponse({ ok: true } satisfies SaveComponentResponse))
       .catch((error: unknown) => {
         console.error("Failed to start capture:", error);
@@ -86,18 +99,20 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   void clearPreviewSession(tabId);
+  void clearCaptureTargetCollectionId(tabId);
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (changeInfo.status === "loading" || typeof changeInfo.url === "string") {
     void clearPreviewSession(tabId);
+    void clearCaptureTargetCollectionId(tabId);
   }
 });
 
-async function injectContentScript(): Promise<void> {
+async function injectContentScript(activeCollectionId: string): Promise<void> {
   const tab = await requireActiveTab();
   await assertCaptureSupportedTab(tab.id!);
-
+  await setCaptureTargetCollectionId(tab.id!, activeCollectionId);
   await injectCaptureRuntime(tab.id!);
 }
 
@@ -117,19 +132,28 @@ async function handleSaveComponent(
     payload.bounds,
     payload.devicePixelRatio
   );
+  const thumbnailMeta = await processComponentThumbnail(croppedDataUrl);
+  const tabId = sender.tab?.id;
+  const captureCollectionId =
+    typeof tabId === "number" ? await getCaptureTargetCollectionId(tabId) : null;
+  const targetCollectionId = captureCollectionId ?? INBOX_COLLECTION_ID;
 
   const record: SavedComponent = {
     id: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}`,
-    collectionIds: [INBOX_COLLECTION_ID],
+    collectionIds: [targetCollectionId],
     url: payload.url,
     title: payload.title,
     capturedAt: new Date().toISOString(),
     html: payload.html,
     cssText: payload.cssText,
     screenshotDataUrl: croppedDataUrl,
+    thumbnailMeta: thumbnailMeta ?? undefined,
     sourceHostSignature: payload.sourceHostSignature
   };
   const savedComponent = await libraryRepository.saveComponent(record);
+  if (typeof tabId === "number") {
+    await clearCaptureTargetCollectionId(tabId);
+  }
   await notifyLibraryUpdated({
     type: "LIBRARY_UPDATED",
     payload: {
