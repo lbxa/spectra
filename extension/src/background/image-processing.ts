@@ -6,6 +6,8 @@ const BACKDROP_WORK_WIDTH = 64;
 const BACKDROP_BLUR_FILTER = "blur(12px)";
 const BACKDROP_JPEG_QUALITY = 0.6;
 const COLOR_SAMPLE_SIZE = 16;
+const CAPTURE_PREVIEW_MAX_DIMENSION = 120;
+const CAPTURE_PREVIEW_JPEG_QUALITY = 0.65;
 
 export async function processComponentThumbnail(screenshotDataUrl: string): Promise<ThumbnailMeta | null> {
   try {
@@ -116,6 +118,37 @@ export async function extractDominantColor(dataUrl: string): Promise<string> {
   const averageBlue = Math.round(blueTotal / alphaTotal);
 
   return normalizeDominantColor(averageRed, averageGreen, averageBlue);
+}
+
+export async function generateCapturePreview(croppedDataUrl: string): Promise<string | null> {
+  try {
+    const sourceBitmap = await decodeBitmap(croppedDataUrl);
+    const scale = Math.min(
+      CAPTURE_PREVIEW_MAX_DIMENSION / sourceBitmap.width,
+      CAPTURE_PREVIEW_MAX_DIMENSION / sourceBitmap.height,
+      1
+    );
+    const targetWidth = Math.max(1, Math.round(sourceBitmap.width * scale));
+    const targetHeight = Math.max(1, Math.round(sourceBitmap.height * scale));
+
+    const previewCanvas = new OffscreenCanvas(targetWidth, targetHeight);
+    const previewContext = previewCanvas.getContext("2d");
+    if (!previewContext) {
+      sourceBitmap.close();
+      return null;
+    }
+
+    previewContext.drawImage(sourceBitmap, 0, 0, targetWidth, targetHeight);
+    sourceBitmap.close();
+
+    const previewBlob = await previewCanvas.convertToBlob({
+      type: "image/jpeg",
+      quality: CAPTURE_PREVIEW_JPEG_QUALITY
+    });
+    return blobToDataUrl(previewBlob);
+  } catch {
+    return null;
+  }
 }
 
 function calculateCoverRect(

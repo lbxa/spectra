@@ -12,7 +12,7 @@ export async function startCapture(activeCollectionId: string): Promise<void> {
   } satisfies StartCaptureMessage)) as SaveComponentResponse;
 
   if (!response?.ok) {
-    throw new Error(response?.error || "Could not start capture.");
+    throw new Error(response?.error || "Could not start capture");
   }
 }
 
@@ -24,7 +24,7 @@ export async function startPreview(component: SavedComponent, activeCollectionId
   } satisfies StartPreviewMessage)) as SaveComponentResponse;
 
   if (!response?.ok) {
-    throw new Error(response?.error || "Could not start preview.");
+    throw new Error(response?.error || "Could not start preview");
   }
 }
 
@@ -41,12 +41,12 @@ export function getCaptureStartErrorMessage(error: unknown): string {
     (error.message.includes("Cannot access a chrome:// URL") ||
       error.message.includes("Capture is not available on this page"))
   ) {
-    return "Capture is unavailable on this page. Open an http(s) page.";
+    return "Capture is unavailable on this page. Open an http(s) page";
   }
   if (error instanceof Error && error.message.includes("too large to save")) {
-    return "Captured snapshot is too large to save. Select a smaller element.";
+    return "Captured snapshot is too large to save. Select a smaller element";
   }
-  return "Failed to start capture.";
+  return "Failed to start capture";
 }
 
 export function getPreviewStartErrorMessage(error: unknown): string {
@@ -56,7 +56,7 @@ export function getPreviewStartErrorMessage(error: unknown): string {
       error.message.includes("Cannot access a chrome:// URL") ||
       error.message.includes("Cannot access contents of url"))
   ) {
-    return "Preview is unavailable on this page. Open an http(s) page.";
+    return "Preview is unavailable on this page. Open an http(s) page";
   }
-  return "Failed to start preview.";
+  return "Failed to start preview";
 }

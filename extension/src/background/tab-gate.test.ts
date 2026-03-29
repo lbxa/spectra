@@ -17,7 +17,7 @@ describe("preview URL gate", () => {
 
   it("throws actionable unsupported-page error", () => {
     expect(() => assertPreviewEligibleUrl("chrome://extensions")).toThrow(
-      "Preview is unavailable on this page. Open an http(s) page and try again."
+      "Preview is unavailable on this page. Open an http(s) page and try again"
     );
   });
 });

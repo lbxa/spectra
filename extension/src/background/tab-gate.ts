@@ -1,13 +1,13 @@
 export async function requireActiveTab(): Promise<chrome.tabs.Tab> {
   const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab || typeof tab.id !== "number") {
-    throw new Error("No active tab available.");
+    throw new Error("No active tab available");
   }
   return tab;
 }
 
 const PREVIEW_UNSUPPORTED_PAGE_ERROR =
-  "Preview is unavailable on this page. Open an http(s) page and try again.";
+  "Preview is unavailable on this page. Open an http(s) page and try again";
 
 export function assertPreviewEligibleUrl(url: string | undefined): void {
   if (!isPreviewEligibleUrl(url)) {
@@ -43,7 +43,7 @@ export async function assertCaptureSupportedTab(tabId: number): Promise<void> {
   }
 
   if (!isCaptureSupportedUrl(pageUrl)) {
-    throw new Error("Capture is not available on this page. Open an http(s) webpage and try again.");
+    throw new Error("Capture is not available on this page. Open an http(s) webpage and try again");
   }
 }
 

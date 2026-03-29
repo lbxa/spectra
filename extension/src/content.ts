@@ -1,3 +1,6 @@
+import { getCaptureFailureMessage } from "./content/capture-runtime-bridge";
+import { rewriteAssetUrls, sanitizeClonedTree } from "./content/capture-snapshot";
+
 (() => {
 type Bounds = {
   left: number;
@@ -34,16 +37,28 @@ type SaveComponentMessage = {
 type SaveComponentResponse = {
   ok: boolean;
   error?: string;
+  previewDataUrl?: string;
 };
 
 type SelectionState = {
   overlay: HTMLDivElement;
+  parentOverlay: HTMLDivElement;
+  shortcutsPanel: HTMLDivElement;
+  shiftShortcutKey: HTMLSpanElement;
+  lastHoveredElement: Element | null;
   isDone: boolean;
 };
 
 type PickerWindow = Window & {
   __componentPickerSelectionState__?: SelectionState;
 };
+
+const FRAME_WAIT_TIMEOUT_MS = 120;
+const TOAST_TRANSITION_MS = 220;
+const TOAST_VISIBLE_MS = 1400;
+const CAPTURE_FLASH_TRANSITION_MS = 250;
+const CAPTURE_PREVIEW_ENTER_MS = 320;
+const CAPTURE_PREVIEW_HOLD_MS = 2500;
 
 const STYLE_PROPERTY_ALLOWLIST = new Set<string>([
   "display",
@@ -285,22 +300,31 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
   const globalKey = "__componentPickerSelectionState__";
 
   if (pickerWindow[globalKey]) {
-    showToast("Capture mode is already active.");
+    showToast("Capture mode is already active");
     return;
   }
 
   const overlay = createOverlay();
+  const parentOverlay = createParentOverlay();
+  const { panel: shortcutsPanel, shiftShortcutKey } = createShortcutsPanel();
   const state: SelectionState = {
     overlay,
+    parentOverlay,
+    shortcutsPanel,
+    shiftShortcutKey,
+    lastHoveredElement: null,
     isDone: false
   };
 
   pickerWindow[globalKey] = state;
   document.documentElement.appendChild(overlay);
+  document.documentElement.appendChild(parentOverlay);
+  document.documentElement.appendChild(shortcutsPanel);
 
   document.addEventListener("mousemove", onMouseMove, true);
   document.addEventListener("click", onClick, true);
   document.addEventListener("keydown", onKeyDown, true);
+  document.addEventListener("keyup", onKeyUp, true);
 
   function onMouseMove(event: MouseEvent): void {
     if (state.isDone) {
@@ -310,7 +334,9 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
     if (!(target instanceof Element)) {
       return;
     }
+    state.lastHoveredElement = target;
     updateOverlay(target.getBoundingClientRect());
+    updateParentOverlayForTarget(target, event.shiftKey);
   }
 
   async function onClick(event: MouseEvent): Promise<void> {
@@ -326,12 +352,15 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
+    void playSound("click.wav");
 
     state.isDone = true;
     cleanup();
+    await waitForPostCleanupPaint();
 
-    const rect = target.getBoundingClientRect();
-    const snapshotHtml = buildStandaloneSnapshotHtml(target);
+    const selectedTarget = resolveSelectedTarget(target, event.shiftKey);
+    const rect = selectedTarget.getBoundingClientRect();
+    const snapshotHtml = buildStandaloneSnapshotHtml(selectedTarget);
     const payload: SaveComponentPayload = {
       html: snapshotHtml,
       cssText: collectDocumentCssText(),
@@ -344,7 +373,7 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
         height: rect.height
       },
       devicePixelRatio: window.devicePixelRatio || 1,
-      sourceHostSignature: computeLocalHostSignature(target)
+      sourceHostSignature: computeLocalHostSignature(selectedTarget)
     };
 
     try {
@@ -354,29 +383,49 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
       } satisfies SaveComponentMessage)) as SaveComponentResponse;
 
       if (!response?.ok) {
-        throw new Error(response?.error || "Capture failed.");
+        throw new Error(response?.error || "Capture failed");
       }
-      showToast("Component captured.");
+      playCaptureFlash();
+      if (response.previewDataUrl) {
+        showCapturePreview(response.previewDataUrl);
+      }
+      void playSound("jingle.wav");
+      showToast("Component captured");
     } catch (error) {
       console.error("Failed to capture component:", error);
+      void playSound("error.wav");
       showToast(getCaptureFailureMessage(error));
     }
   }
 
   function onKeyDown(event: KeyboardEvent): void {
-    if (event.key !== "Escape") {
+    if (event.key === "Escape") {
+      state.isDone = true;
+      cleanup();
+      showToast("Capture cancelled");
       return;
     }
-    state.isDone = true;
-    cleanup();
-    showToast("Capture cancelled.");
+    if (event.key === "Shift") {
+      refreshParentOverlay(true);
+      setShiftShortcutActive(shiftShortcutKey, true);
+    }
+  }
+
+  function onKeyUp(event: KeyboardEvent): void {
+    if (event.key === "Shift") {
+      refreshParentOverlay(false);
+      setShiftShortcutActive(shiftShortcutKey, false);
+    }
   }
 
   function cleanup(): void {
     document.removeEventListener("mousemove", onMouseMove, true);
     document.removeEventListener("click", onClick, true);
     document.removeEventListener("keydown", onKeyDown, true);
+    document.removeEventListener("keyup", onKeyUp, true);
     overlay.remove();
+    parentOverlay.remove();
+    shortcutsPanel.remove();
     delete pickerWindow[globalKey];
   }
 
@@ -387,12 +436,49 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
     overlay.style.width = `${Math.max(0, rect.width)}px`;
     overlay.style.height = `${Math.max(0, rect.height)}px`;
   }
+
+  function updateParentOverlayForTarget(target: Element, isShiftHeld: boolean): void {
+    if (!isShiftHeld) {
+      parentOverlay.style.display = "none";
+      return;
+    }
+    const parentTarget = resolveParentTarget(target);
+    if (!parentTarget) {
+      parentOverlay.style.display = "none";
+      return;
+    }
+    const rect = parentTarget.getBoundingClientRect();
+    parentOverlay.style.display = "block";
+    parentOverlay.style.left = `${Math.max(0, rect.left)}px`;
+    parentOverlay.style.top = `${Math.max(0, rect.top)}px`;
+    parentOverlay.style.width = `${Math.max(0, rect.width)}px`;
+    parentOverlay.style.height = `${Math.max(0, rect.height)}px`;
+  }
+
+  function refreshParentOverlay(isShiftHeld: boolean): void {
+    if (!state.lastHoveredElement) {
+      parentOverlay.style.display = "none";
+      return;
+    }
+    updateParentOverlayForTarget(state.lastHoveredElement, isShiftHeld);
+  }
 })();
+
+function resolveSelectedTarget(target: Element, isShiftHeld: boolean): Element {
+  if (!isShiftHeld) {
+    return target;
+  }
+  return resolveParentTarget(target) ?? target;
+}
+
+function resolveParentTarget(target: Element): Element | null {
+  return target.parentElement;
+}
 
 function buildStandaloneSnapshotHtml(target: Element): string {
   const clonedRoot = target.cloneNode(true);
   if (!(clonedRoot instanceof Element)) {
-    throw new Error("Unable to clone selected element.");
+    throw new Error("Unable to clone selected element");
   }
 
   const originalElements = collectElementTree(target);
@@ -459,107 +545,6 @@ function shouldDropStyleValue(propertyName: string, rawValue: string): boolean {
     return false;
   }
   return defaults.has(value);
-}
-
-function sanitizeClonedTree(root: Element): void {
-  for (const scriptElement of Array.from(root.querySelectorAll("script"))) {
-    scriptElement.remove();
-  }
-
-  const elements = collectElementTree(root);
-  for (const element of elements) {
-    for (const attribute of Array.from(element.attributes)) {
-      const attributeName = attribute.name.toLowerCase();
-      const attributeValue = attribute.value.trim();
-      if (attributeName.startsWith("on")) {
-        element.removeAttribute(attribute.name);
-        continue;
-      }
-      if (attributeName.startsWith("data-")) {
-        element.removeAttribute(attribute.name);
-        continue;
-      }
-      if (attributeName === "class") {
-        element.removeAttribute(attribute.name);
-        continue;
-      }
-      if (attributeName === "style" && attributeValue.length === 0) {
-        element.removeAttribute(attribute.name);
-      }
-    }
-  }
-}
-
-function rewriteAssetUrls(root: Element, baseUrl: string): void {
-  for (const element of collectElementTree(root)) {
-    rewriteAttributeToAbsoluteUrl(element, "src", baseUrl);
-    rewriteAttributeToAbsoluteUrl(element, "href", baseUrl);
-    rewriteAttributeToAbsoluteUrl(element, "poster", baseUrl);
-    rewriteSrcSetToAbsoluteUrls(element, "srcset", baseUrl);
-  }
-}
-
-function rewriteAttributeToAbsoluteUrl(element: Element, attributeName: string, baseUrl: string): void {
-  if (!element.hasAttribute(attributeName)) {
-    return;
-  }
-
-  const rawValue = element.getAttribute(attributeName);
-  if (typeof rawValue !== "string" || rawValue.trim() === "") {
-    return;
-  }
-
-  const absoluteValue = toAbsoluteUrl(rawValue, baseUrl);
-  if (absoluteValue) {
-    element.setAttribute(attributeName, absoluteValue);
-  }
-}
-
-function rewriteSrcSetToAbsoluteUrls(element: Element, attributeName: string, baseUrl: string): void {
-  if (!element.hasAttribute(attributeName)) {
-    return;
-  }
-
-  const rawValue = element.getAttribute(attributeName);
-  if (typeof rawValue !== "string" || rawValue.trim() === "") {
-    return;
-  }
-
-  const rewrittenValue = rawValue
-    .split(",")
-    .map((candidate) => {
-      const trimmedCandidate = candidate.trim();
-      if (!trimmedCandidate) {
-        return "";
-      }
-      const firstSpaceIndex = trimmedCandidate.search(/\s/);
-      if (firstSpaceIndex === -1) {
-        return toAbsoluteUrl(trimmedCandidate, baseUrl) || trimmedCandidate;
-      }
-      const urlPart = trimmedCandidate.slice(0, firstSpaceIndex);
-      const descriptorPart = trimmedCandidate.slice(firstSpaceIndex).trim();
-      const absoluteUrl = toAbsoluteUrl(urlPart, baseUrl) || urlPart;
-      return descriptorPart ? `${absoluteUrl} ${descriptorPart}` : absoluteUrl;
-    })
-    .filter((candidate) => candidate.length > 0)
-    .join(", ");
-
-  if (rewrittenValue) {
-    element.setAttribute(attributeName, rewrittenValue);
-  }
-}
-
-function toAbsoluteUrl(value: string, baseUrl: string): string | null {
-  const trimmedValue = value.trim();
-  if (!trimmedValue || trimmedValue.startsWith("#")) {
-    return null;
-  }
-
-  try {
-    return new URL(trimmedValue, baseUrl).toString();
-  } catch {
-    return null;
-  }
 }
 
 function collectDocumentCssText(): string {
@@ -707,6 +692,98 @@ function createOverlay(): HTMLDivElement {
   return overlay;
 }
 
+function createParentOverlay(): HTMLDivElement {
+  const overlay = document.createElement("div");
+  overlay.setAttribute("data-component-picker-parent-overlay", "true");
+  overlay.style.position = "fixed";
+  overlay.style.pointerEvents = "none";
+  overlay.style.zIndex = "2147483646";
+  overlay.style.border = "2px solid #d946ef";
+  overlay.style.background = "rgba(217, 70, 239, 0.1)";
+  overlay.style.borderRadius = "4px";
+  overlay.style.boxSizing = "border-box";
+  overlay.style.transition = "all 0.03s linear";
+  overlay.style.display = "none";
+  return overlay;
+}
+
+function createShortcutsPanel(): { panel: HTMLDivElement; shiftShortcutKey: HTMLSpanElement } {
+  const panel = document.createElement("div");
+  panel.setAttribute("data-component-picker-shortcuts", "true");
+  panel.style.position = "fixed";
+  panel.style.right = "12px";
+  panel.style.bottom = "12px";
+  panel.style.display = "grid";
+  panel.style.gap = "6px";
+  panel.style.padding = "10px 12px";
+  panel.style.borderRadius = "10px";
+  panel.style.border = "1px solid rgba(148, 163, 184, 0.28)";
+  panel.style.background = "rgba(17, 24, 39, 0.94)";
+  panel.style.color = "#f8fafc";
+  panel.style.font = "12px/1.35 -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+  panel.style.boxShadow = "0 8px 20px rgba(0, 0, 0, 0.25)";
+  panel.style.zIndex = "2147483647";
+  panel.style.pointerEvents = "none";
+  panel.style.userSelect = "none";
+
+  const title = document.createElement("div");
+  title.textContent = "Keyboard shortcuts";
+  title.style.fontSize = "11px";
+  title.style.fontWeight = "600";
+  title.style.letterSpacing = "0.02em";
+  title.style.opacity = "0.9";
+
+  const shortcutsGrid = document.createElement("div");
+  shortcutsGrid.style.display = "grid";
+  shortcutsGrid.style.gridTemplateColumns = "max-content 1fr";
+  shortcutsGrid.style.columnGap = "8px";
+  shortcutsGrid.style.rowGap = "6px";
+  shortcutsGrid.style.alignItems = "center";
+
+  const escapeRow = createShortcutRow("Esc", "Exit capture");
+  const shiftRow = createShortcutRow("Shift", "Select parent");
+  const shiftShortcutKey = shiftRow.key;
+
+  shortcutsGrid.append(escapeRow.key, escapeRow.label, shiftRow.key, shiftRow.label);
+  panel.append(title, shortcutsGrid);
+  return { panel, shiftShortcutKey };
+}
+
+function createShortcutRow(
+  keyLabel: string,
+  description: string
+): { key: HTMLSpanElement; label: HTMLSpanElement } {
+  const key = document.createElement("span");
+  key.textContent = keyLabel;
+  key.style.padding = "2px 7px";
+  key.style.borderRadius = "6px";
+  key.style.border = "1px solid rgba(148, 163, 184, 0.4)";
+  key.style.background = "rgba(51, 65, 85, 0.35)";
+  key.style.fontSize = "11px";
+  key.style.fontWeight = "600";
+  key.style.color = "#e2e8f0";
+  key.style.transition = "border-color 120ms ease, color 120ms ease, background 120ms ease";
+
+  const label = document.createElement("span");
+  label.textContent = description;
+  label.style.fontSize = "11px";
+  label.style.opacity = "0.9";
+
+  return { key, label };
+}
+
+function setShiftShortcutActive(shiftShortcutKey: HTMLSpanElement, isActive: boolean): void {
+  if (isActive) {
+    shiftShortcutKey.style.borderColor = "rgba(217, 70, 239, 0.9)";
+    shiftShortcutKey.style.background = "rgba(217, 70, 239, 0.22)";
+    shiftShortcutKey.style.color = "#f5d0fe";
+    return;
+  }
+  shiftShortcutKey.style.borderColor = "rgba(148, 163, 184, 0.4)";
+  shiftShortcutKey.style.background = "rgba(51, 65, 85, 0.35)";
+  shiftShortcutKey.style.color = "#e2e8f0";
+}
+
 function showToast(message: string): void {
   const existing = document.querySelector("[data-component-picker-toast='true']");
   if (existing instanceof HTMLElement) {
@@ -717,35 +794,168 @@ function showToast(message: string): void {
   toast.setAttribute("data-component-picker-toast", "true");
   toast.textContent = message;
   toast.style.position = "fixed";
-  toast.style.right = "16px";
+  toast.style.left = "50%";
   toast.style.top = "16px";
+  toast.style.transform = "translateX(-50%) translateY(-14px)";
+  toast.style.opacity = "0";
+  toast.style.transition = `transform ${TOAST_TRANSITION_MS}ms ease, opacity ${TOAST_TRANSITION_MS}ms ease`;
   toast.style.zIndex = "2147483647";
   toast.style.background = "rgba(17, 24, 39, 0.92)";
   toast.style.color = "#f9fafb";
   toast.style.padding = "8px 12px";
   toast.style.borderRadius = "8px";
+  toast.style.whiteSpace = "nowrap";
+  toast.style.maxWidth = "calc(100vw - 24px)";
+  toast.style.textOverflow = "ellipsis";
+  toast.style.overflow = "hidden";
   toast.style.font = "12px/1.4 -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
   toast.style.pointerEvents = "none";
   toast.style.boxShadow = "0 4px 10px rgba(0, 0, 0, 0.25)";
   document.documentElement.appendChild(toast);
-  window.setTimeout(() => toast.remove(), 1400);
+  window.requestAnimationFrame(() => {
+    toast.style.transform = "translateX(-50%) translateY(0)";
+    toast.style.opacity = "1";
+  });
+
+  window.setTimeout(() => {
+    if (!toast.isConnected) {
+      return;
+    }
+    toast.style.transform = "translateX(-50%) translateY(-10px)";
+    toast.style.opacity = "0";
+    window.setTimeout(() => {
+      toast.remove();
+    }, TOAST_TRANSITION_MS);
+  }, TOAST_VISIBLE_MS);
 }
 
-function getCaptureFailureMessage(error: unknown): string {
-  if (error instanceof Error && error.message.includes("runtime unavailable")) {
-    return "Extension runtime unavailable. Reload the extension, then refresh this tab.";
+function playCaptureFlash(): void {
+  const flash = document.createElement("div");
+  flash.setAttribute("data-component-picker-flash", "true");
+  flash.style.position = "fixed";
+  flash.style.inset = "0";
+  flash.style.pointerEvents = "none";
+  flash.style.zIndex = "2147483647";
+  flash.style.background = "#fff";
+  flash.style.opacity = "0.82";
+  flash.style.transition = `opacity ${CAPTURE_FLASH_TRANSITION_MS}ms ease-out`;
+  document.documentElement.appendChild(flash);
+
+  window.requestAnimationFrame(() => {
+    flash.style.opacity = "0";
+  });
+
+  const removeFlash = (): void => {
+    flash.removeEventListener("transitionend", removeFlash);
+    flash.remove();
+  };
+  flash.addEventListener("transitionend", removeFlash, { once: true });
+  window.setTimeout(removeFlash, CAPTURE_FLASH_TRANSITION_MS + 100);
+}
+
+function showCapturePreview(dataUrl: string): void {
+  const existing = document.querySelector("[data-component-picker-capture-preview='true']");
+  if (existing instanceof HTMLElement) {
+    existing.remove();
   }
-  if (error instanceof Error && error.message.includes("too large to save")) {
-    return "Snapshot too large. Select a smaller element.";
+
+  const preview = document.createElement("img");
+  preview.setAttribute("data-component-picker-capture-preview", "true");
+  preview.src = dataUrl;
+  preview.alt = "Captured screenshot preview";
+  preview.style.position = "fixed";
+  preview.style.top = "16px";
+  preview.style.right = "16px";
+  preview.style.width = "120px";
+  preview.style.height = "auto";
+  preview.style.maxHeight = "120px";
+  preview.style.objectFit = "cover";
+  preview.style.borderRadius = "10px";
+  preview.style.border = "1px solid rgba(148, 163, 184, 0.35)";
+  preview.style.boxShadow = "0 14px 28px rgba(0, 0, 0, 0.28)";
+  preview.style.background = "rgba(15, 23, 42, 0.8)";
+  preview.style.pointerEvents = "none";
+  preview.style.zIndex = "2147483647";
+  preview.style.opacity = "0";
+  preview.style.transform = "translateX(calc(100% + 20px))";
+  preview.style.transition = `transform ${CAPTURE_PREVIEW_ENTER_MS}ms ease, opacity ${CAPTURE_PREVIEW_ENTER_MS}ms ease`;
+
+  document.documentElement.appendChild(preview);
+  window.requestAnimationFrame(() => {
+    preview.style.transform = "translateX(0)";
+    preview.style.opacity = "1";
+  });
+
+  window.setTimeout(() => {
+    if (!preview.isConnected) {
+      return;
+    }
+    preview.style.transform = "translateX(calc(100% + 20px))";
+    preview.style.opacity = "0";
+    window.setTimeout(() => {
+      preview.remove();
+    }, CAPTURE_PREVIEW_ENTER_MS);
+  }, CAPTURE_PREVIEW_HOLD_MS);
+}
+
+async function playSound(fileName: "click.wav" | "jingle.wav" | "error.wav"): Promise<void> {
+  const runtime = globalThis.chrome?.runtime;
+  if (!runtime || typeof runtime.getURL !== "function") {
+    return;
   }
-  return "Capture failed.";
+
+  try {
+    const audio = new Audio(runtime.getURL(`audio/${fileName}`));
+    audio.volume = 0.5;
+    await audio.play();
+  } catch {
+    // Ignore blocked autoplay and missing codec failures.
+  }
 }
 
 async function sendRuntimeMessage(message: SaveComponentMessage): Promise<unknown> {
   const runtime = globalThis.chrome?.runtime;
   if (!runtime || typeof runtime.sendMessage !== "function") {
-    throw new Error("Extension runtime unavailable.");
+    throw new Error("Extension runtime unavailable");
   }
   return runtime.sendMessage(message);
+}
+
+async function waitForPostCleanupPaint(): Promise<void> {
+  if (typeof window.requestAnimationFrame !== "function") {
+    await waitForDelay(FRAME_WAIT_TIMEOUT_MS);
+    return;
+  }
+
+  await waitForAnimationFrameWithTimeout();
+  await waitForAnimationFrameWithTimeout();
+}
+
+function waitForAnimationFrameWithTimeout(): Promise<void> {
+  return new Promise((resolve) => {
+    let isSettled = false;
+    const settle = (): void => {
+      if (isSettled) {
+        return;
+      }
+      isSettled = true;
+      resolve();
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      settle();
+    }, FRAME_WAIT_TIMEOUT_MS);
+
+    window.requestAnimationFrame(() => {
+      window.clearTimeout(timeoutId);
+      settle();
+    });
+  });
+}
+
+function waitForDelay(delayMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  });
 }
 })();

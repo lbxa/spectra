@@ -81,7 +81,7 @@ type PreviewSession = {
     event.stopPropagation();
     event.stopImmediatePropagation();
     commitInsert(candidate, session.component).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : "Unable to insert preview.";
+      const message = error instanceof Error ? error.message : "Unable to insert preview";
       session.overlay?.showToast(message);
       void sendStatus({ type: "PREVIEW_ERROR", code: "insert_failed", message });
       resetToIdle();
@@ -124,11 +124,11 @@ type PreviewSession = {
 
     const candidates = scanCandidateContainers();
     if (candidates.length === 0) {
-      overlay.showToast("No valid target containers found.");
+      overlay.showToast("No valid target containers found");
       await sendStatus({
         type: "PREVIEW_ERROR",
         code: "no_candidates",
-        message: "No valid target containers found."
+        message: "No valid target containers found"
       });
       resetToIdle();
       return;
@@ -188,7 +188,7 @@ type PreviewSession = {
     session.toolbar.mount(inserted.wrapper, session.relation, session.alignment);
 
     session.watcher = watchPreviewRemoval(inserted.previewId, () => {
-      overlay.showToast("Preview removed by page update.");
+      overlay.showToast("Preview removed by page update");
       void sendStatus({ type: "PREVIEW_REMOVED", previewId: inserted.previewId });
       removeInsertedPreview(false);
       resetToIdle();

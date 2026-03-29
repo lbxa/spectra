@@ -30,6 +30,7 @@ export type SaveComponentMessage = {
 export type SaveComponentResponse = {
   ok: boolean;
   error?: string;
+  previewDataUrl?: string;
 };
 
 export type WorkerSessionState = "idle" | "starting" | "active" | "closed" | "error";

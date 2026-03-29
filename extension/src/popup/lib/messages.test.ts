@@ -30,22 +30,22 @@ describe("getPreviewStartErrorMessage", () => {
       getPreviewStartErrorMessage(
         new Error("Preview is unavailable on this page. Open an http(s) page and try again.")
       )
-    ).toBe("Preview is unavailable on this page. Open an http(s) page.");
+    ).toBe("Preview is unavailable on this page. Open an http(s) page");
 
     expect(getPreviewStartErrorMessage(new Error("Cannot access a chrome:// URL"))).toBe(
-      "Preview is unavailable on this page. Open an http(s) page."
+      "Preview is unavailable on this page. Open an http(s) page"
     );
 
     expect(
       getPreviewStartErrorMessage(
         new Error("Cannot access contents of url \"https://example.com\". Extension manifest must request permission.")
       )
-    ).toBe("Preview is unavailable on this page. Open an http(s) page.");
+    ).toBe("Preview is unavailable on this page. Open an http(s) page");
   });
 
   it("keeps generic fallback for unknown errors", () => {
-    expect(getPreviewStartErrorMessage(new Error("network issue"))).toBe("Failed to start preview.");
-    expect(getPreviewStartErrorMessage("plain error")).toBe("Failed to start preview.");
+    expect(getPreviewStartErrorMessage(new Error("network issue"))).toBe("Failed to start preview");
+    expect(getPreviewStartErrorMessage("plain error")).toBe("Failed to start preview");
   });
 });
 

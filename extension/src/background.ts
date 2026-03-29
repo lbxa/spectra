@@ -8,7 +8,7 @@ import {
 import { libraryRepository } from "./lib/library/repository";
 import { INBOX_COLLECTION_ID, type SavedComponent } from "./lib/library/types";
 import { injectCaptureRuntime } from "./background/injector";
-import { processComponentThumbnail } from "./background/image-processing";
+import { generateCapturePreview, processComponentThumbnail } from "./background/image-processing";
 import { handlePreviewStatus, handleStartPreview } from "./background/message-router";
 import {
   clearCaptureTargetCollectionId,
@@ -46,7 +46,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
     if (!message.activeCollectionId?.trim()) {
       sendResponse({
         ok: false,
-        error: "Missing active collection id."
+        error: "Missing active collection id"
       } satisfies SaveComponentResponse);
       return false;
     }
@@ -56,7 +56,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
         console.error("Failed to start capture:", error);
         sendResponse({
           ok: false,
-          error: error instanceof Error ? error.message : "Unable to start capture."
+          error: error instanceof Error ? error.message : "Unable to start capture"
         } satisfies SaveComponentResponse);
       });
     return true;
@@ -68,7 +68,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
       .catch((error: unknown) => {
         sendResponse({
           ok: false,
-          error: error instanceof Error ? error.message : "Unable to start preview."
+          error: error instanceof Error ? error.message : "Unable to start preview"
         } satisfies SaveComponentResponse);
       });
     return true;
@@ -76,12 +76,17 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 
   if (message.type === "SAVE_COMPONENT") {
     handleSaveComponent(message.payload, sender)
-      .then(() => sendResponse({ ok: true } satisfies SaveComponentResponse))
+      .then((previewDataUrl) =>
+        sendResponse({
+          ok: true,
+          previewDataUrl: previewDataUrl ?? undefined
+        } satisfies SaveComponentResponse)
+      )
       .catch((error: unknown) => {
         console.error("Failed to save component:", error);
         sendResponse({
           ok: false,
-          error: error instanceof Error ? error.message : "Unable to save component."
+          error: error instanceof Error ? error.message : "Unable to save component"
         } satisfies SaveComponentResponse);
       });
     return true;
@@ -119,7 +124,7 @@ async function injectContentScript(activeCollectionId: string): Promise<void> {
 async function handleSaveComponent(
   payload: SaveComponentPayload,
   sender: chrome.runtime.MessageSender
-): Promise<void> {
+): Promise<string | null> {
   await libraryRepository.initLibrary();
   validatePayload(payload);
 
@@ -162,6 +167,7 @@ async function handleSaveComponent(
       collectionId: savedComponent.collectionIds[0]
     }
   });
+  return generateCapturePreview(croppedDataUrl);
 }
 
 function validatePayload(payload: SaveComponentPayload): void {

@@ -209,7 +209,7 @@ export function App() {
       libraryStateSelectedCollectionId: libraryState.selectedCollectionId
     });
     if (!activeCollectionId) {
-      setStatusMessage("Select a collection before starting capture.");
+      setStatusMessage("Select a collection before starting capture");
       return;
     }
 
@@ -238,7 +238,7 @@ export function App() {
       activeCollectionIdFromUi
     });
     if (!activeCollectionId) {
-      setStatusMessage("Select a collection before starting preview.");
+      setStatusMessage("Select a collection before starting preview");
       return;
     }
 

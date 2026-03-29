@@ -10,10 +10,10 @@ import { setPreviewSession, updatePreviewSession } from "./session-store";
 
 export async function handleStartPreview(message: StartPreviewMessage): Promise<SaveComponentResponse> {
   if (!message.component?.id) {
-    return { ok: false, error: "Missing component payload." };
+    return { ok: false, error: "Missing component payload" };
   }
   if (typeof message.activeCollectionId !== "string" || message.activeCollectionId.trim().length === 0) {
-    return { ok: false, error: "Missing active collection id." };
+    return { ok: false, error: "Missing active collection id" };
   }
 
   try {
@@ -42,7 +42,7 @@ export async function handleStartPreview(message: StartPreviewMessage): Promise<
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Could not start preview."
+      error: error instanceof Error ? error.message : "Could not start preview"
     };
   }
 }

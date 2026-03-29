@@ -25,6 +25,7 @@ export function CaptureHeader({ isCaptureDisabled, onStartCapture, statusMessage
         type="button"
         size="sm"
         className="h-9 w-9 rounded-md px-0 shadow-none"
+        title="Capture component (hold Shift to target parent)"
         disabled={isCaptureDisabled}
         onClick={() => {
           void onStartCapture();

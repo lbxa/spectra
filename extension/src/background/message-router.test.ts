@@ -66,7 +66,7 @@ describe("handleStartPreview", () => {
 
     expect(response).toEqual({
       ok: false,
-      error: "Missing active collection id."
+      error: "Missing active collection id"
     });
     expect(setPreviewSession).not.toHaveBeenCalled();
   });
