@@ -42,6 +42,98 @@ export type SavedComponent = {
   sourceHostSignature: HostSignature;
 };
 
+export type PreviewMatchMode = "exact_path" | "path_prefix";
+
+export type AnchorStrategy = "selector" | "text" | "structure";
+
+export type AnchorFingerprint = {
+  tagName?: string;
+  classTokens?: string[];
+  textSnippet?: string;
+  siblingSignature?: string[];
+};
+
+export type AnchorSpec = {
+  strategy: AnchorStrategy;
+  primarySelector?: string;
+  fallbackSelectors: string[];
+  fingerprint?: AnchorFingerprint;
+};
+
+export type PreviewRenderSpec = {
+  visible: boolean;
+  wrapperBox?: {
+    width?: string;
+    maxWidth?: string;
+    zIndex?: number;
+  };
+};
+
+export type PreviewPlacementSpec = {
+  anchor: AnchorSpec;
+  insertionMode: "before" | "inside" | "after";
+  alignment: "start" | "center" | "end";
+  order: number;
+};
+
+export type SavedPreviewInstance = {
+  id: string;
+  componentId: string;
+  componentVersion: number;
+  placement: PreviewPlacementSpec;
+  render: PreviewRenderSpec;
+  layout?: {
+    referenceViewport: {
+      width: number;
+      height: number;
+    };
+    normalizedRect: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+  };
+};
+
+export type SavedPreviewTarget = {
+  origin: string;
+  pathname: string;
+  matchMode: PreviewMatchMode;
+  canonicalUrl: string;
+};
+
+export type SavedPreviewApplyStatus =
+  | "applied"
+  | "applied_with_fallback"
+  | "anchor_not_found"
+  | "component_missing"
+  | "behavior_disabled";
+
+export type SavedPreviewApplyResult = {
+  instanceId: string;
+  status: SavedPreviewApplyStatus;
+  resolvedSelector?: string;
+  reason?: string;
+};
+
+export type SavedPreview = {
+  id: string;
+  name: string;
+  status: "active" | "archived" | "deleted";
+  target: SavedPreviewTarget;
+  instances: SavedPreviewInstance[];
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
+  schemaVersion: number;
+};
+
+export type SavedPreviewListItem = Pick<
+  SavedPreview,
+  "id" | "name" | "status" | "target" | "updatedAt" | "createdAt" | "revision"
+>;
+
 export type LibraryMeta = {
   id: LibraryId;
   createdAt: string;
@@ -70,6 +162,10 @@ export interface LibraryRepository {
     targetCollectionId: string
   ): Promise<SavedComponent>;
   deleteComponent(id: string): Promise<void>;
+  saveSavedPreview(input: SavedPreview): Promise<SavedPreview>;
+  listSavedPreviewsForPage(input: { origin: string; pathname: string }): Promise<SavedPreviewListItem[]>;
+  getSavedPreview(id: string): Promise<SavedPreview | null>;
+  softDeleteSavedPreview(id: string): Promise<void>;
 }
 
 export const LIBRARY_ID: LibraryId = "library";

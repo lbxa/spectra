@@ -3,6 +3,8 @@ import {
   INBOX_COLLECTION_ID,
   INBOX_COLLECTION_NAME,
   LIBRARY_ID,
+  type SavedPreview,
+  type SavedPreviewListItem,
   type Collection,
   type LibraryMeta,
   type LibraryRepository,
@@ -20,12 +22,15 @@ import {
 } from "./repository/normalizers";
 
 const DATABASE_NAME = "spectra-library-v2";
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 
 const LIBRARY_META_STORE = "libraryMeta";
 const COLLECTIONS_STORE = "collections";
 const COMPONENTS_STORE = "components";
 const COMPONENTS_BY_COLLECTION_INDEX = "byCollectionId";
+const SAVED_PREVIEWS_STORE = "savedPreviews";
+const SAVED_PREVIEWS_BY_TARGET_ORIGIN_INDEX = "byTargetOrigin";
+const SAVED_PREVIEWS_BY_STATUS_INDEX = "byStatus";
 
 class IndexedDbLibraryRepository implements LibraryRepository {
   private static instance: IndexedDbLibraryRepository | null = null;
@@ -488,6 +493,100 @@ class IndexedDbLibraryRepository implements LibraryRepository {
     });
   }
 
+  async saveSavedPreview(input: SavedPreview): Promise<SavedPreview> {
+    await this.initLibraryState();
+    if (!input.id) {
+      throw new Error("Saved preview id is required.");
+    }
+
+    return this.readwriteTransaction([SAVED_PREVIEWS_STORE], async (transaction) => {
+      const previewsStore = transaction.objectStore(SAVED_PREVIEWS_STORE);
+      const existing = await requestToPromise<SavedPreview | undefined>(previewsStore.get(input.id));
+      const now = new Date().toISOString();
+
+      const next: SavedPreview = {
+        ...input,
+        status: input.status ?? "active",
+        target: {
+          ...input.target,
+          pathname: normalizePathname(input.target.pathname)
+        },
+        createdAt: existing?.createdAt ?? input.createdAt ?? now,
+        updatedAt: now,
+        revision: existing ? Math.max(existing.revision + 1, input.revision || 1) : input.revision || 1,
+        schemaVersion: input.schemaVersion || 1
+      };
+      previewsStore.put(next);
+      return next;
+    });
+  }
+
+  async listSavedPreviewsForPage(input: {
+    origin: string;
+    pathname: string;
+  }): Promise<SavedPreviewListItem[]> {
+    await this.initLibraryState();
+    const normalizedPathname = normalizePathname(input.pathname);
+    const previews = await this.readonlyTransaction([SAVED_PREVIEWS_STORE], async (transaction) => {
+      const previewsStore = transaction.objectStore(SAVED_PREVIEWS_STORE);
+      const byTargetOrigin = previewsStore.index(SAVED_PREVIEWS_BY_TARGET_ORIGIN_INDEX);
+      return requestToPromise<SavedPreview[]>(byTargetOrigin.getAll(input.origin));
+    });
+
+    return previews
+      .filter((preview) => {
+        if (preview.status !== "active") {
+          return false;
+        }
+        if (preview.target.matchMode === "exact_path") {
+          return normalizePathname(preview.target.pathname) === normalizedPathname;
+        }
+        return normalizedPathname.startsWith(normalizePathname(preview.target.pathname));
+      })
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .map((preview) => ({
+        id: preview.id,
+        name: preview.name,
+        status: preview.status,
+        target: preview.target,
+        updatedAt: preview.updatedAt,
+        createdAt: preview.createdAt,
+        revision: preview.revision
+      }));
+  }
+
+  async getSavedPreview(id: string): Promise<SavedPreview | null> {
+    await this.initLibraryState();
+    if (!id) {
+      return null;
+    }
+    return this.readonlyTransaction([SAVED_PREVIEWS_STORE], async (transaction) => {
+      const previewsStore = transaction.objectStore(SAVED_PREVIEWS_STORE);
+      const preview = await requestToPromise<SavedPreview | undefined>(previewsStore.get(id));
+      return preview ?? null;
+    });
+  }
+
+  async softDeleteSavedPreview(id: string): Promise<void> {
+    await this.initLibraryState();
+    if (!id) {
+      throw new Error("Saved preview id is required.");
+    }
+    await this.readwriteTransaction([SAVED_PREVIEWS_STORE], async (transaction) => {
+      const previewsStore = transaction.objectStore(SAVED_PREVIEWS_STORE);
+      const existing = await requestToPromise<SavedPreview | undefined>(previewsStore.get(id));
+      if (!existing) {
+        return;
+      }
+      previewsStore.put({
+        ...existing,
+        status: "deleted",
+        updatedAt: new Date().toISOString(),
+        revision: existing.revision + 1
+      });
+    });
+  }
+
   private async initLibraryState(): Promise<void> {
     if (!this.initializationPromise) {
       this.initializationPromise = this.ensureBaseLibraryRecords();
@@ -585,13 +684,28 @@ class IndexedDbLibraryRepository implements LibraryRepository {
 
       request.onupgradeneeded = () => {
         const database = request.result;
-        database.createObjectStore(LIBRARY_META_STORE, { keyPath: "id" });
-        database.createObjectStore(COLLECTIONS_STORE, { keyPath: "id" });
-        const componentStore = database.createObjectStore(COMPONENTS_STORE, { keyPath: "id" });
-        componentStore.createIndex(COMPONENTS_BY_COLLECTION_INDEX, "collectionIds", {
-          unique: false,
-          multiEntry: true
-        });
+        if (!database.objectStoreNames.contains(LIBRARY_META_STORE)) {
+          database.createObjectStore(LIBRARY_META_STORE, { keyPath: "id" });
+        }
+        if (!database.objectStoreNames.contains(COLLECTIONS_STORE)) {
+          database.createObjectStore(COLLECTIONS_STORE, { keyPath: "id" });
+        }
+        if (!database.objectStoreNames.contains(COMPONENTS_STORE)) {
+          const componentStore = database.createObjectStore(COMPONENTS_STORE, { keyPath: "id" });
+          componentStore.createIndex(COMPONENTS_BY_COLLECTION_INDEX, "collectionIds", {
+            unique: false,
+            multiEntry: true
+          });
+        }
+        if (!database.objectStoreNames.contains(SAVED_PREVIEWS_STORE)) {
+          const savedPreviewsStore = database.createObjectStore(SAVED_PREVIEWS_STORE, { keyPath: "id" });
+          savedPreviewsStore.createIndex(SAVED_PREVIEWS_BY_TARGET_ORIGIN_INDEX, "target.origin", {
+            unique: false
+          });
+          savedPreviewsStore.createIndex(SAVED_PREVIEWS_BY_STATUS_INDEX, "status", {
+            unique: false
+          });
+        }
       };
 
       request.onsuccess = () => {
@@ -607,3 +721,13 @@ class IndexedDbLibraryRepository implements LibraryRepository {
 }
 
 export const libraryRepository: LibraryRepository = IndexedDbLibraryRepository.getInstance();
+
+function normalizePathname(pathname: string): string {
+  if (!pathname || pathname === "/") {
+    return "/";
+  }
+  const normalized = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  return normalized.endsWith("/") && normalized.length > 1
+    ? normalized.slice(0, normalized.length - 1)
+    : normalized;
+}

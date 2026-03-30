@@ -1,6 +1,12 @@
 import type { SavedComponent } from "@/lib/library/types";
 import { describe, expect, it, vi } from "vitest";
-import { getPreviewStartErrorMessage, startCapture, startPreview } from "./messages";
+import {
+  applySavedPreviewOnActiveTab,
+  getPreviewStartErrorMessage,
+  listSavedPreviewsForPage,
+  startCapture,
+  startPreview
+} from "./messages";
 
 function createComponent(id: string, collectionId: string): SavedComponent {
   return {
@@ -80,6 +86,41 @@ describe("startCapture", () => {
     expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
       type: "START_CAPTURE",
       activeCollectionId: "col-7"
+    });
+  });
+});
+
+describe("listSavedPreviewsForPage", () => {
+  it("sends list command and returns previews", async () => {
+    vi.mocked(chrome.runtime.sendMessage).mockResolvedValueOnce(
+      ({
+        ok: true,
+        previews: []
+      } as unknown) as void
+    );
+
+    await expect(listSavedPreviewsForPage("https://example.com", "/products")).resolves.toMatchObject({
+      ok: true,
+      previews: []
+    });
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+      type: "LIST_SAVED_PREVIEWS_FOR_PAGE",
+      payload: {
+        origin: "https://example.com",
+        pathname: "/products"
+      }
+    });
+  });
+});
+
+describe("applySavedPreviewOnActiveTab", () => {
+  it("sends apply command for active tab", async () => {
+    await applySavedPreviewOnActiveTab("pv-1");
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+      type: "APPLY_SAVED_PREVIEW_ON_TAB",
+      payload: {
+        previewId: "pv-1"
+      }
     });
   });
 });

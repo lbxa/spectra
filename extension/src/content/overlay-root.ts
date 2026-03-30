@@ -41,10 +41,30 @@ export function mountOverlayRoot(): OverlayRoot {
 
   const toastHost = document.createElement("div");
   toastHost.style.position = "fixed";
-  toastHost.style.right = "12px";
-  toastHost.style.top = "12px";
-  toastHost.style.display = "grid";
-  toastHost.style.gap = "6px";
+  toastHost.style.left = "50%";
+  toastHost.style.top = "16px";
+  toastHost.style.transform = "translateX(-50%) translateY(-14px)";
+  toastHost.style.opacity = "0";
+  toastHost.style.transition = "transform 220ms ease, opacity 220ms ease";
+  toastHost.style.pointerEvents = "none";
+  toastHost.style.zIndex = "2147483647";
+
+  const timeoutIds = new Set<number>();
+  const frameIds = new Set<number>();
+  const registerTimeout = (callback: () => void, delayMs: number): void => {
+    const timeoutId = window.setTimeout(() => {
+      timeoutIds.delete(timeoutId);
+      callback();
+    }, delayMs);
+    timeoutIds.add(timeoutId);
+  };
+  const registerFrame = (callback: () => void): void => {
+    const frameId = window.requestAnimationFrame(() => {
+      frameIds.delete(frameId);
+      callback();
+    });
+    frameIds.add(frameId);
+  };
 
   root.append(hoverOutline, selectedOutline, ghost, label, controlsHost, toastHost);
   document.documentElement.appendChild(root);
@@ -57,21 +77,40 @@ export function mountOverlayRoot(): OverlayRoot {
     label,
     controlsHost,
     showToast(message) {
-      const toast = document.createElement("div");
-      toast.textContent = message;
-      toast.style.maxWidth = "280px";
-      toast.style.padding = "8px 10px";
-      toast.style.borderRadius = "8px";
-      toast.style.background = "rgba(17,24,39,0.94)";
-      toast.style.color = "#f8fafc";
-      toast.style.font = "12px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif";
-      toast.style.boxShadow = "0 8px 20px rgba(0,0,0,0.25)";
-      toastHost.appendChild(toast);
-      window.setTimeout(() => {
-        toast.remove();
-      }, 1800);
+      toastHost.textContent = message;
+      toastHost.style.background = "rgba(17, 24, 39, 0.92)";
+      toastHost.style.color = "#f9fafb";
+      toastHost.style.padding = "8px 12px";
+      toastHost.style.borderRadius = "8px";
+      toastHost.style.whiteSpace = "nowrap";
+      toastHost.style.maxWidth = "calc(100vw - 24px)";
+      toastHost.style.textOverflow = "ellipsis";
+      toastHost.style.overflow = "hidden";
+      toastHost.style.font = "12px/1.4 -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      toastHost.style.boxShadow = "0 4px 10px rgba(0, 0, 0, 0.25)";
+      toastHost.style.transform = "translateX(-50%) translateY(-14px)";
+      toastHost.style.opacity = "0";
+      registerFrame(() => {
+        toastHost.style.transform = "translateX(-50%) translateY(0)";
+        toastHost.style.opacity = "1";
+      });
+      registerTimeout(() => {
+        toastHost.style.transform = "translateX(-50%) translateY(-14px)";
+        toastHost.style.opacity = "0";
+      }, 1400);
+      registerTimeout(() => {
+        toastHost.textContent = "";
+      }, 1620);
     },
     destroy() {
+      for (const timeoutId of timeoutIds) {
+        window.clearTimeout(timeoutId);
+      }
+      timeoutIds.clear();
+      for (const frameId of frameIds) {
+        window.cancelAnimationFrame(frameId);
+      }
+      frameIds.clear();
       root.remove();
     }
   };

@@ -1,8 +1,32 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { Collection } from "@/lib/library/types";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { CollectionRail } from "./CollectionRail";
+
+vi.mock("@/components/ui/context-menu", () => ({
+  ContextMenu: ({ children }: { children: ReactNode }) => <>{children}</>,
+  ContextMenuTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+  ContextMenuContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ContextMenuItem: ({
+    children,
+    onSelect
+  }: {
+    children: ReactNode;
+    onSelect?: () => void;
+  }) => (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={() => {
+        onSelect?.();
+      }}
+    >
+      {children}
+    </button>
+  ),
+  ContextMenuSeparator: () => null
+}));
 
 function createCollection(id: string, name: string): Collection {
   const now = new Date().toISOString();
@@ -41,7 +65,8 @@ describe("CollectionRail", () => {
     expect(secondCardButton).not.toBeNull();
 
     fireEvent.contextMenu(secondCardButton as HTMLElement);
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Rename" }));
+    const renameItems = await screen.findAllByRole("menuitem", { name: "Rename" });
+    fireEvent.click(renameItems[1] as HTMLElement);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("Second")).toHaveFocus();

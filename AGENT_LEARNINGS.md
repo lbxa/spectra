@@ -18,3 +18,4 @@
 - Keep host-signature computation single-sourced in `extension/src/lib/preview/host-signature.ts` for both capture and preview ranking paths.
 - Keep popup orchestration in hooks (`extension/src/popup/hooks/use-library-state.ts`, `use-capture-preview-actions.ts`) and keep UI components view-focused.
 - Repository behavior is stable API-first (`libraryRepository`), with internals split under `extension/src/lib/library/repository/*`; preserve external behavior/contracts when extending internals.
+- Keep cross-feature popup shell state (for example active space/tab selection like `library` vs `previews`) in a dedicated app-shell/meta slice, not in domain slices such as collections or previews. Domain slices should only own state intrinsic to that domain.

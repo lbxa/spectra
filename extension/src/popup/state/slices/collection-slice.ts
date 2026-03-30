@@ -1,5 +1,7 @@
 import type { Collection, SavedComponent } from "@/lib/library/types";
 import type { StateCreator } from "zustand";
+import type { AppSlice } from "./app-slice";
+import type { PreviewsSlice } from "./previews-slice";
 
 export type PopupView = "collection" | "componentCanvas";
 export type HydrateStatus = "idle" | "hydrating" | "ready" | "error";
@@ -34,7 +36,7 @@ export type CollectionSlice = {
   }) => void;
 };
 
-export type PopupStore = CollectionSlice;
+export type PopupStore = CollectionSlice & PreviewsSlice & AppSlice;
 type PopupStoreCreator<TSlice> = StateCreator<
   PopupStore,
   [],

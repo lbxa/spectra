@@ -1,4 +1,8 @@
 import type {
+  ApplySavedPreviewOnTabMessage,
+  ApplySavedPreviewOnTabResponse,
+  ListSavedPreviewsForPageMessage,
+  ListSavedPreviewsForPageResponse,
   SaveComponentResponse,
   StartCaptureMessage,
   StartPreviewMessage
@@ -25,6 +29,35 @@ export async function startPreview(component: SavedComponent, activeCollectionId
 
   if (!response?.ok) {
     throw new Error(response?.error || "Could not start preview");
+  }
+}
+
+export async function listSavedPreviewsForPage(origin: string, pathname: string): Promise<ListSavedPreviewsForPageResponse> {
+  const response = (await chrome.runtime.sendMessage({
+    type: "LIST_SAVED_PREVIEWS_FOR_PAGE",
+    payload: {
+      origin,
+      pathname
+    }
+  } satisfies ListSavedPreviewsForPageMessage)) as ListSavedPreviewsForPageResponse;
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "Could not list saved previews");
+  }
+
+  return response;
+}
+
+export async function applySavedPreviewOnActiveTab(previewId: string): Promise<void> {
+  const response = (await chrome.runtime.sendMessage({
+    type: "APPLY_SAVED_PREVIEW_ON_TAB",
+    payload: {
+      previewId
+    }
+  } satisfies ApplySavedPreviewOnTabMessage)) as ApplySavedPreviewOnTabResponse;
+
+  if (!response?.ok) {
+    throw new Error(response?.error || "Could not apply preview");
   }
 }
 

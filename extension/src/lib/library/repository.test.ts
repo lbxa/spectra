@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { libraryRepository } from "./repository";
-import { INBOX_COLLECTION_ID, type SavedComponent } from "./types";
+import { INBOX_COLLECTION_ID, type SavedComponent, type SavedPreview } from "./types";
 
 const TEST_HOST_SIGNATURE: SavedComponent["sourceHostSignature"] = {
   landmark: "unknown",
@@ -41,6 +41,25 @@ function buildComponent(id: string, collectionIds: string[]): SavedComponent {
     cssText: "",
     screenshotDataUrl: "data:image/png;base64,aaa",
     sourceHostSignature: TEST_HOST_SIGNATURE
+  };
+}
+
+function buildSavedPreview(id: string, pathname: string): SavedPreview {
+  return {
+    id,
+    name: `Preview ${id}`,
+    status: "active",
+    target: {
+      origin: "https://example.com",
+      pathname,
+      matchMode: "exact_path",
+      canonicalUrl: `https://example.com${pathname}`
+    },
+    instances: [],
+    createdAt: "2026-03-30T12:00:00.000Z",
+    updatedAt: "2026-03-30T12:00:00.000Z",
+    revision: 1,
+    schemaVersion: 1
   };
 }
 
@@ -145,5 +164,59 @@ describe("library repository copy and move", () => {
     await expect(libraryRepository.listComponents(extraCollection.id)).resolves.toMatchObject([
       { id: component.id }
     ]);
+  });
+});
+
+describe("library repository saved previews", () => {
+  beforeEach(async () => {
+    await resetLibraryState();
+  });
+
+  it("saves and lists matching previews by origin and pathname", async () => {
+    await libraryRepository.saveSavedPreview(buildSavedPreview("pv-1", "/products"));
+    await libraryRepository.saveSavedPreview(buildSavedPreview("pv-2", "/pricing"));
+
+    await expect(
+      libraryRepository.listSavedPreviewsForPage({
+        origin: "https://example.com",
+        pathname: "/products"
+      })
+    ).resolves.toMatchObject([{ id: "pv-1" }]);
+  });
+
+  it("matches path_prefix previews and ignores soft-deleted previews", async () => {
+    await libraryRepository.saveSavedPreview({
+      ...buildSavedPreview("pv-prefix", "/docs"),
+      target: {
+        origin: "https://example.com",
+        pathname: "/docs",
+        matchMode: "path_prefix",
+        canonicalUrl: "https://example.com/docs"
+      }
+    });
+
+    await libraryRepository.softDeleteSavedPreview("pv-prefix");
+    await expect(
+      libraryRepository.listSavedPreviewsForPage({
+        origin: "https://example.com",
+        pathname: "/docs/getting-started"
+      })
+    ).resolves.toEqual([]);
+  });
+
+  it("bumps revision when updating an existing saved preview id", async () => {
+    await libraryRepository.saveSavedPreview(buildSavedPreview("pv-rev", "/plans"));
+    const updated = await libraryRepository.saveSavedPreview({
+      ...buildSavedPreview("pv-rev", "/plans"),
+      name: "Preview Updated",
+      revision: 1
+    });
+
+    expect(updated.revision).toBe(2);
+    await expect(libraryRepository.getSavedPreview("pv-rev")).resolves.toMatchObject({
+      id: "pv-rev",
+      name: "Preview Updated",
+      revision: 2
+    });
   });
 });
