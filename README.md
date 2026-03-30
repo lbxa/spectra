@@ -10,14 +10,34 @@ Chrome Extension (Manifest V3) for capturing visible UI elements as reusable ref
 ## Project Structure
 
 - `public/manifest.json`: extension metadata and permissions.
-- `extension/src/content.ts`: selection overlay and capture runtime entrypoint.
-- `extension/src/content/capture-snapshot.ts`: scoped CSS extraction, sanitization, and asset URL rewriting.
-- `extension/src/background.ts`: screenshot capture/crop and local persistence.
+- `extension/src/content.ts`: thin capture bootstrap/orchestrator.
+- `extension/src/content/capture/selection-runtime.ts`: selection/interaction runtime helpers.
+- `extension/src/content/capture/snapshot-builder.ts`: standalone snapshot assembly.
+- `extension/src/content/capture/style-policy.ts`: style allowlist/default-filter policy.
+- `extension/src/content/capture-snapshot.ts`: scoped CSS extraction, sanitization, and asset URL rewriting primitives.
+- `extension/src/background.ts`: runtime handlers + screenshot capture/crop orchestration.
 - `extension/src/content/preview-insert.ts`: page preview insertion and CSS compatibility paths.
+- `extension/src/lib/library/messages.ts`: canonical runtime message/event contracts + guards.
+- `extension/src/lib/library/application-service.ts`: library mutation orchestration seam for background/popup callers.
+- `extension/src/lib/events/chrome-runtime-event-publisher.ts`: runtime event publisher adapter.
+- `extension/src/lib/library/repository.ts` + `extension/src/lib/library/repository/*`: repository public surface + split internals (idb core, normalizers, scoped ops).
 - `extension/src/popup.tsx` + `extension/src/popup/*`: popup UI and library workflow.
+- `extension/src/popup/hooks/use-library-state.ts`: popup hydration/loading/refresh/listener orchestration.
+- `extension/src/popup/hooks/use-capture-preview-actions.ts`: popup capture/preview action orchestration.
 - `samples/v1/*`: pre-pruning extraction outputs.
 - `samples/v2/*`: post-pruning extraction outputs.
 - `samples/v3/*`: hybrid capture outputs used for token/fidelity comparisons.
+
+## Architecture Overview (Current)
+
+The extension now uses small seams to reduce duplicate transport and mutation logic while preserving behavior:
+
+- **Canonical contracts**: runtime command/event envelopes are centralized in `extension/src/lib/library/messages.ts`.
+- **Application service seam**: UI/background mutation callers use `LibraryApplicationService`, not ad-hoc event payload creation.
+- **Event publishing seam**: domain events are mapped to runtime envelopes by `ChromeRuntimeEventPublisher`.
+- **Capture decomposition**: `content.ts` orchestrates; capture computation/policy lives under `extension/src/content/capture/*`.
+- **Shared host signature logic**: capture and preview ranking use the same implementation in `extension/src/lib/preview/host-signature.ts`.
+- **Repository split**: indexedDB primitives, normalizers, and operation helpers are split into focused modules under `extension/src/lib/library/repository/*`.
 
 ## File Naming Convention
 

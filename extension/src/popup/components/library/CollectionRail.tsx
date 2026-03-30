@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Collection } from "@/lib/library/types";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import { CollectionCard } from "./CollectionCard";
+import { useCollectionDrafts } from "./use-collection-drafts";
 
 type CollectionRailProps = {
   collections: Collection[];
@@ -17,15 +18,6 @@ type CollectionRailProps = {
   ) => Promise<void>;
 };
 
-type CollectionDraft = {
-  name: string;
-  description: string;
-  isDirty: boolean;
-  isEditing: boolean;
-};
-
-const COLLECTION_DRAFT_SAVE_DEBOUNCE_MS = 300;
-
 export function CollectionRail({
   collections,
   selectedCollectionId,
@@ -37,127 +29,20 @@ export function CollectionRail({
 }: CollectionRailProps) {
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newCollectionDescription, setNewCollectionDescription] = useState("");
-  const [draftsById, setDraftsById] = useState<Record<string, CollectionDraft>>({});
   const [isCreateFormVisible, setIsCreateFormVisible] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [pendingRenameCollectionId, setPendingRenameCollectionId] = useState<string | null>(null);
-  const saveTimeoutByIdRef = useRef<Record<string, number>>({});
-  const draftsByIdRef = useRef<Record<string, CollectionDraft>>({});
-  const collectionsRef = useRef<Collection[]>(collections);
-
-  const normalizedCollections = useMemo(
-    () =>
-      collections.map((collection) => ({
-        ...collection,
-        name: collection.name,
-        description: collection.description
-      })),
-    [collections]
-  );
-
-  useEffect(() => {
-    setDraftsById((current) => {
-      const nextDrafts: Record<string, CollectionDraft> = {};
-      for (const collection of normalizedCollections) {
-        const existing = current[collection.id];
-        if (existing && (existing.isDirty || existing.isEditing)) {
-          nextDrafts[collection.id] = existing;
-          continue;
-        }
-        nextDrafts[collection.id] = {
-          name: collection.name,
-          description: collection.description,
-          isDirty: false,
-          isEditing: false
-        };
-      }
-      return nextDrafts;
-    });
-  }, [normalizedCollections]);
-
-  useEffect(() => {
-    draftsByIdRef.current = draftsById;
-  }, [draftsById]);
-
-  useEffect(() => {
-    collectionsRef.current = collections;
-  }, [collections]);
-
-  useEffect(() => {
-    return () => {
-      for (const timeoutId of Object.values(saveTimeoutByIdRef.current)) {
-        window.clearTimeout(timeoutId);
-      }
-      saveTimeoutByIdRef.current = {};
-    };
-  }, []);
-
-  const clearScheduledSave = (collectionId: string): void => {
-    const existingTimeout = saveTimeoutByIdRef.current[collectionId];
-    if (typeof existingTimeout === "number") {
-      window.clearTimeout(existingTimeout);
-      delete saveTimeoutByIdRef.current[collectionId];
-    }
-  };
-
-  const scheduleSave = (collectionId: string): void => {
-    clearScheduledSave(collectionId);
-    saveTimeoutByIdRef.current[collectionId] = window.setTimeout(() => {
-      void flushSave(collectionId);
-    }, COLLECTION_DRAFT_SAVE_DEBOUNCE_MS);
-  };
-
-  const flushSave = async (collectionId: string): Promise<void> => {
-    clearScheduledSave(collectionId);
-
-    const draft = draftsByIdRef.current[collectionId];
-    const source = collectionsRef.current.find((collection) => collection.id === collectionId);
-    if (!draft || !source) {
-      return;
-    }
-
-    const nextName = draft.name.trim();
-    const nextDescription = draft.description.trim();
-    if (nextName === source.name && nextDescription === source.description) {
-      setDraftsById((current) => {
-        const existing = current[collectionId];
-        if (!existing) {
-          return current;
-        }
-        return {
-          ...current,
-          [collectionId]: {
-            name: source.name,
-            description: source.description,
-            isDirty: false,
-            isEditing: existing.isEditing
-          }
-        };
-      });
-      return;
-    }
-
-    await onUpdateCollection(collectionId, {
-      name: nextName,
-      description: nextDescription
-    });
-
-    setDraftsById((current) => {
-      const existing = current[collectionId];
-      if (!existing) {
-        return current;
-      }
-      return {
-        ...current,
-        [collectionId]: {
-          name: nextName,
-          description: nextDescription,
-          isDirty: false,
-          isEditing: existing.isEditing
-        }
-      };
-    });
-  };
+  const {
+    draftsById,
+    pendingRenameCollectionId,
+    setPendingRenameCollectionId,
+    onChangeName,
+    onChangeDescription,
+    onFocusDraft,
+    onBlurDraft
+  } = useCollectionDrafts({
+    collections,
+    onUpdateCollection
+  });
 
   const handleCreate = async (): Promise<void> => {
     const name = newCollectionName.trim();
@@ -290,70 +175,16 @@ export function CollectionRail({
                   }
                 }}
                 onChangeName={(name) => {
-                  setDraftsById((current) => ({
-                    ...current,
-                    [collection.id]: {
-                      ...(current[collection.id] ?? {
-                        name: collection.name,
-                        description: collection.description,
-                        isDirty: false,
-                        isEditing: false
-                      }),
-                      name,
-                      isDirty: true
-                    }
-                  }));
-                  scheduleSave(collection.id);
+                  onChangeName(collection, name);
                 }}
                 onChangeDescription={(description) => {
-                  setDraftsById((current) => ({
-                    ...current,
-                    [collection.id]: {
-                      ...(current[collection.id] ?? {
-                        name: collection.name,
-                        description: collection.description,
-                        isDirty: false,
-                        isEditing: false
-                      }),
-                      description,
-                      isDirty: true
-                    }
-                  }));
-                  scheduleSave(collection.id);
+                  onChangeDescription(collection, description);
                 }}
                 onFocusDraft={() => {
-                  setDraftsById((current) => {
-                    const existing = current[collection.id];
-                    if (!existing) {
-                      return current;
-                    }
-                    if (existing.isEditing) {
-                      return current;
-                    }
-                    return {
-                      ...current,
-                      [collection.id]: {
-                        ...existing,
-                        isEditing: true
-                      }
-                    };
-                  });
+                  onFocusDraft(collection.id);
                 }}
                 onBlurDraft={() => {
-                  setDraftsById((current) => {
-                    const existing = current[collection.id];
-                    if (!existing || !existing.isEditing) {
-                      return current;
-                    }
-                    return {
-                      ...current,
-                      [collection.id]: {
-                        ...existing,
-                        isEditing: false
-                      }
-                    };
-                  });
-                  void flushSave(collection.id);
+                  void onBlurDraft(collection.id);
                 }}
               />
             );

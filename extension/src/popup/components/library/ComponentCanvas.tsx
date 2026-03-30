@@ -68,28 +68,13 @@ export function ComponentCanvas({
   onClose,
   className
 }: ComponentCanvasProps) {
-  const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
-  const isCopied = copyStatus === "copied";
+  const { isCopied, markCopied, resetCopied } = useCopyIndicator();
   const [fitSequence, setFitSequence] = useState(0);
   const [nodes, setNodes, onNodesChange] = useNodesState<ComponentFlowNode>([
     createComponentNode(component, INITIAL_NODE_POSITION, () => {
       setFitSequence((current) => current + 1);
     })
   ]);
-
-  useEffect(() => {
-    if (!isCopied) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setCopyStatus("idle");
-    }, 1200);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [isCopied]);
 
   useEffect(() => {
     setNodes([
@@ -103,9 +88,9 @@ export function ComponentCanvas({
   const handleCopyRaw = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(component.html);
-      setCopyStatus("copied");
+      markCopied();
     } catch {
-      setCopyStatus("idle");
+      resetCopied();
     }
   };
 
@@ -152,6 +137,34 @@ export function ComponentCanvas({
       </ReactFlow>
     </div>
   );
+}
+
+function useCopyIndicator(): {
+  isCopied: boolean;
+  markCopied: () => void;
+  resetCopied: () => void;
+} {
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied">("idle");
+  const isCopied = copyStatus === "copied";
+
+  useEffect(() => {
+    if (!isCopied) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setCopyStatus("idle");
+    }, 1200);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isCopied]);
+
+  return {
+    isCopied,
+    markCopied: () => setCopyStatus("copied"),
+    resetCopied: () => setCopyStatus("idle")
+  };
 }
 
 function TopCenterControlBar({

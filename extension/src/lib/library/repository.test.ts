@@ -92,7 +92,7 @@ describe("library repository copy and move", () => {
     await resetLibraryState();
   });
 
-  it("copies a component to another collection without removing existing memberships", async () => {
+  it("copies a component to another collection as an independent duplicate", async () => {
     const sourceCollection = await libraryRepository.createCollection({ name: "Source copy" });
     const targetCollection = await libraryRepository.createCollection({ name: "Target copy" });
     const component = buildComponent("copy-component", [sourceCollection.id]);
@@ -100,14 +100,26 @@ describe("library repository copy and move", () => {
 
     const copied = await libraryRepository.copyComponentToCollection(component.id, targetCollection.id);
 
-    expect(copied.collectionIds).toContain(sourceCollection.id);
-    expect(copied.collectionIds).toContain(targetCollection.id);
+    expect(copied.id).not.toBe(component.id);
+    expect(copied.collectionIds).toEqual([targetCollection.id]);
     await expect(libraryRepository.listComponents(sourceCollection.id)).resolves.toMatchObject([
       { id: component.id }
     ]);
     await expect(libraryRepository.listComponents(targetCollection.id)).resolves.toMatchObject([
-      { id: component.id }
+      { id: copied.id }
     ]);
+
+    await libraryRepository.deleteComponent(copied.id);
+    await expect(libraryRepository.getComponent(component.id)).resolves.toMatchObject({ id: component.id });
+    await expect(libraryRepository.getComponent(copied.id)).resolves.toBeNull();
+
+    const copiedAgain = await libraryRepository.copyComponentToCollection(component.id, targetCollection.id);
+    await libraryRepository.deleteComponent(component.id);
+    await expect(libraryRepository.getComponent(component.id)).resolves.toBeNull();
+    await expect(libraryRepository.getComponent(copiedAgain.id)).resolves.toMatchObject({
+      id: copiedAgain.id,
+      collectionIds: [targetCollection.id]
+    });
   });
 
   it("moves a component from source to target collection and preserves other memberships", async () => {
