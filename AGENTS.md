@@ -1,5 +1,18 @@
 # Agent Conventions
 
+## Workflow Guardrails
+
+- Check `AGENT_LEARNINGS.md` at the start of implementation/review work and follow any active guidance there as part of the standard workflow.
+- Run verification gates before claiming completion:
+  - `bun run typecheck`
+  - `bun run build`
+- Preserve the capture pipeline's fidelity-first policy:
+  - Do not ship optimizations that regress preview insertion behavior.
+  - Keep compatibility for both marker-tagged scoped CSS payloads and legacy unmarked CSS payloads.
+- Respect architecture seams when modifying extension logic:
+  - Keep runtime message/event contracts in `extension/src/lib/library/messages.ts`.
+  - Route library mutations through `LibraryApplicationService` instead of ad-hoc payload assembly.
+
 ## File Naming
 
 - Follow React conventions for components: use `PascalCase` for React component filenames and component symbols.
