@@ -13,6 +13,17 @@
   - Keep runtime message/event contracts in `extension/src/lib/library/messages.ts`.
   - Route library mutations through `LibraryApplicationService` instead of ad-hoc payload assembly.
 
+## Preview Runtime Refactor Quality Bar
+
+When evaluating content preview runtime work (for example `preview-entry.ts`, `preview-insert.ts`, `preview-session-toolbar.ts`), treat the following factors as the clean-code bar:
+
+- Keep `preview-entry.ts` orchestration/bootstrap focused; push domain logic into dedicated runtime modules.
+- Prefer explicit reducer-driven state transitions over scattered mutable state updates.
+- Keep inserted preview lifecycle invariants (register/remove/replace/clear/teardown) in one registry seam.
+- Isolate saved preview save/load/apply side effects behind a service boundary with shared busy-state handling.
+- Keep pure utilities (target normalization, anchor resolution, layout normalization) separate from DOM/event side effects.
+- Preserve behavior and contracts; verify with characterization tests plus `bun run typecheck` and `bun run build`.
+
 ## File Naming
 
 - Follow React conventions for components: use `PascalCase` for React component filenames and component symbols.

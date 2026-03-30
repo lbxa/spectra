@@ -39,6 +39,17 @@ The extension now uses small seams to reduce duplicate transport and mutation lo
 - **Shared host signature logic**: capture and preview ranking use the same implementation in `extension/src/lib/preview/host-signature.ts`.
 - **Repository split**: indexedDB primitives, normalizers, and operation helpers are split into focused modules under `extension/src/lib/library/repository/*`.
 
+## Preview Runtime: Clean Code Factors
+
+The content preview runtime refactor is exemplary because it improved clarity without changing runtime contracts:
+
+- **Single-purpose modules**: `preview-entry.ts` is now bootstrap-only, while orchestration, state transitions, and helper logic are split into focused runtime modules.
+- **Explicit state transitions**: preview mode changes (`idle`, `targeting`, `inserted`) are centralized in a reducer instead of ad-hoc writes spread across handlers.
+- **Lifecycle invariants in one place**: inserted preview register/remove/replace/clear logic is consolidated in a registry, reducing drift in watcher/toolbar teardown ordering.
+- **Side-effect boundaries**: saved preview save/load/apply behavior is isolated in a dedicated service with a shared busy-state wrapper.
+- **Pure helper extraction**: anchor resolution, target normalization, and layout normalization are separated from imperative event wiring.
+- **Behavior-preserving verification**: characterization tests plus `bun run typecheck` and `bun run build` gates were run to validate parity.
+
 ## File Naming Convention
 
 - Use `kebab-case` for non-component filenames.
