@@ -9,6 +9,26 @@ export type Collection = {
   isSystem: boolean;
 };
 
+export type HostSignature = {
+  landmark: "header" | "hero" | "main" | "section" | "article" | "aside" | "nav" | "footer" | "form" | "unknown";
+  hostTag: string;
+  layoutMode: "block" | "flex-row" | "flex-column" | "grid" | "inline" | "unknown";
+  widthBucket: "xs" | "sm" | "md" | "lg" | "xl";
+  depth: number;
+  siblingCount: number;
+  repeatedSiblingTag?: string;
+  ancestorTags: string[];
+  nearbyHeading?: string;
+};
+
+export type ThumbnailMeta = {
+  originalWidth: number;
+  originalHeight: number;
+  aspectRatio: number;
+  dominantColor: string;
+  blurredBackdropDataUrl: string;
+};
+
 export type SavedComponent = {
   id: string;
   collectionIds: string[];
@@ -16,7 +36,10 @@ export type SavedComponent = {
   title: string;
   capturedAt: string;
   html: string;
+  cssText: string;
   screenshotDataUrl: string;
+  thumbnailMeta?: ThumbnailMeta;
+  sourceHostSignature: HostSignature;
 };
 
 export type LibraryMeta = {
@@ -40,7 +63,12 @@ export interface LibraryRepository {
   listComponents(collectionId?: string): Promise<SavedComponent[]>;
   getComponent(id: string): Promise<SavedComponent | null>;
   saveComponent(input: SavedComponent): Promise<SavedComponent>;
-  moveComponent(id: string, targetCollectionId: string): Promise<SavedComponent>;
+  copyComponentToCollection(id: string, targetCollectionId: string): Promise<SavedComponent>;
+  moveComponentToCollection(
+    id: string,
+    sourceCollectionId: string,
+    targetCollectionId: string
+  ): Promise<SavedComponent>;
   deleteComponent(id: string): Promise<void>;
 }
 

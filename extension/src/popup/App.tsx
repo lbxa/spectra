@@ -2,10 +2,17 @@ import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { isLibraryUpdatedMessage, type LibraryUpdatedMessage } from "@/lib/library/messages";
 import { libraryRepository } from "@/lib/library/repository";
 import type { Collection, SavedComponent } from "@/lib/library/types";
+import { usePopupStore } from "./state/store";
 import { CaptureHeader } from "./components/CaptureHeader";
 import { CollectionRail } from "./components/library/CollectionRail";
 import { LibraryGrid } from "./components/library/LibraryGrid";
-import { getCaptureStartErrorMessage, isPopupCaptureSupportedUrl, startCapture } from "./lib/messages";
+import {
+  getCaptureStartErrorMessage,
+  getPreviewStartErrorMessage,
+  isPopupCaptureSupportedUrl,
+  startCapture,
+  startPreview
+} from "./lib/messages";
 import { getLibraryPreferences, setSelectedCollectionPreference } from "./lib/library-preferences";
 
 type LibraryViewState = {
@@ -25,7 +32,45 @@ export function App() {
   const [statusMessage, setStatusMessage] = useState("");
   const [isCaptureAvailable, setIsCaptureAvailable] = useState(true);
   const [isCaptureStarting, setIsCaptureStarting] = useState(false);
-  const [activeComponentId, setActiveComponentId] = useState<string | null>(null);
+  const [isPreviewStarting, setIsPreviewStarting] = useState(false);
+  const selectedCollectionId = usePopupStore((state) => state.selectedCollectionId);
+  const selectedComponentId = usePopupStore((state) => state.selectedComponentId);
+  const hasHydrated = usePopupStore((state) => state.hasHydrated);
+  const hydrateStatus = usePopupStore((state) => state.hydrateStatus);
+  const openCollection = usePopupStore((state) => state.openCollection);
+  const openComponentCanvas = usePopupStore((state) => state.openComponentCanvas);
+  const closeComponentCanvas = usePopupStore((state) => state.closeComponentCanvas);
+  const markHydrated = usePopupStore((state) => state.markHydrated);
+  const markHydrationError = usePopupStore((state) => state.markHydrationError);
+  const removeComponent = usePopupStore((state) => state.removeComponent);
+  const removeCollection = usePopupStore((state) => state.removeCollection);
+  const validateRestoredView = usePopupStore((state) => state.validateRestoredView);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydratePopupState = async (): Promise<void> => {
+      try {
+        await usePopupStore.persist.rehydrate();
+        if (cancelled) {
+          return;
+        }
+        markHydrated();
+      } catch (error) {
+        console.error("Failed to hydrate popup store:", error);
+        if (cancelled) {
+          return;
+        }
+        markHydrationError();
+      }
+    };
+
+    void hydratePopupState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [markHydrated, markHydrationError]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,13 +127,22 @@ export function App() {
       if (!isLibraryUpdatedMessage(message)) {
         return;
       }
-      void refreshLibraryState(libraryState.selectedCollectionId, setLibraryState, setStatusMessage);
+      if (message.payload.event === "COLLECTION_UPDATED" && message.payload.collection) {
+        setLibraryState((current) => ({
+          ...current,
+          collections: current.collections.map((collection) =>
+            collection.id === message.payload.collection?.id ? message.payload.collection : collection
+          )
+        }));
+        return;
+      }
+      void refreshLibraryState(selectedCollectionId, setLibraryState, setStatusMessage);
     };
     chrome.runtime.onMessage.addListener(listener);
     return () => {
       chrome.runtime.onMessage.removeListener(listener);
     };
-  }, [libraryState.selectedCollectionId]);
+  }, [selectedCollectionId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,24 +171,53 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!activeComponentId) {
+    if (!selectedComponentId) {
+      return;
+    }
+    if (libraryState.isLoading) {
       return;
     }
 
     const exists = Object.values(libraryState.componentsByCollectionId)
       .flat()
-      .some((component) => component.id === activeComponentId);
+      .some((component) => component.id === selectedComponentId);
     if (!exists) {
-      setActiveComponentId(null);
+      removeComponent(selectedComponentId);
     }
-  }, [activeComponentId, libraryState.componentsByCollectionId]);
+  }, [libraryState.componentsByCollectionId, libraryState.isLoading, removeComponent, selectedComponentId]);
+
+  useEffect(() => {
+    if (!hasHydrated || libraryState.isLoading) {
+      return;
+    }
+    validateRestoredView({
+      collections: libraryState.collections,
+      componentsByCollectionId: libraryState.componentsByCollectionId
+    });
+  }, [
+    hasHydrated,
+    libraryState.collections,
+    libraryState.componentsByCollectionId,
+    libraryState.isLoading,
+    validateRestoredView
+  ]);
 
   const handleCaptureStart = async (): Promise<void> => {
+    const activeCollectionId = resolveActiveCollectionId({
+      collections: libraryState.collections,
+      selectedCollectionId,
+      libraryStateSelectedCollectionId: libraryState.selectedCollectionId
+    });
+    if (!activeCollectionId) {
+      setStatusMessage("Select a collection before starting capture");
+      return;
+    }
+
     setIsCaptureStarting(true);
     setStatusMessage("Starting capture");
 
     try {
-      await startCapture();
+      await startCapture(activeCollectionId);
       setStatusMessage("Capture mode enabled on the active tab");
       window.close();
     } catch (error) {
@@ -144,11 +227,40 @@ export function App() {
     }
   };
 
+  const handlePreviewStart = async (
+    component: SavedComponent,
+    activeCollectionIdFromUi: string | null
+  ): Promise<void> => {
+    const activeCollectionId = resolveActiveCollectionId({
+      collections: libraryState.collections,
+      selectedCollectionId,
+      libraryStateSelectedCollectionId: libraryState.selectedCollectionId,
+      activeCollectionIdFromUi
+    });
+    if (!activeCollectionId) {
+      setStatusMessage("Select a collection before starting preview");
+      return;
+    }
+
+    setIsPreviewStarting(true);
+    setStatusMessage("Starting preview");
+    try {
+      await startPreview(component, activeCollectionId);
+      setStatusMessage("Preview mode enabled on the active tab");
+      window.close();
+    } catch (error) {
+      console.error("Failed to start preview:", error);
+      setStatusMessage(getPreviewStartErrorMessage(error));
+      setIsPreviewStarting(false);
+    }
+  };
+
   const handleSelectCollection = async (collectionId: string): Promise<void> => {
     setLibraryState((current) => ({
       ...current,
       selectedCollectionId: collectionId
     }));
+    openCollection(collectionId);
     await setSelectedCollectionPreference(collectionId);
   };
 
@@ -216,6 +328,7 @@ export function App() {
           id: collectionId
         }
       });
+      removeCollection(collectionId);
       await refreshLibraryState(null, setLibraryState, setStatusMessage);
       setStatusMessage(`Deleted "${collection.name}"`);
     } catch (error) {
@@ -223,7 +336,7 @@ export function App() {
     }
   };
 
-  const handleMoveComponentToCollection = async (
+  const handleCopyComponentToCollection = async (
     componentId: string,
     targetCollectionId: string
   ): Promise<void> => {
@@ -244,7 +357,57 @@ export function App() {
       return;
     }
     try {
-      const movedComponent = await libraryRepository.moveComponent(componentId, normalizedTargetCollectionId);
+      const copiedComponent = await libraryRepository.copyComponentToCollection(
+        componentId,
+        normalizedTargetCollectionId
+      );
+      await notifyLibraryUpdated({
+        type: "LIBRARY_UPDATED",
+        payload: {
+          event: "COMPONENT_MOVED",
+          component: copiedComponent
+        }
+      });
+      await refreshLibraryState(selectedCollectionId, setLibraryState, setStatusMessage);
+      setStatusMessage("Component copied to collection");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Could not copy component to collection");
+    }
+  };
+
+  const handleMoveComponentToCollection = async (
+    componentId: string,
+    sourceCollectionId: string,
+    targetCollectionId: string
+  ): Promise<void> => {
+    const sourceComponent = getComponentById(libraryState.componentsByCollectionId, componentId);
+    if (!sourceComponent) {
+      return;
+    }
+
+    const normalizedSourceCollectionId = sourceCollectionId.trim();
+    const normalizedTargetCollectionId = targetCollectionId.trim();
+    if (
+      !normalizedSourceCollectionId ||
+      !normalizedTargetCollectionId ||
+      normalizedSourceCollectionId === normalizedTargetCollectionId ||
+      !sourceComponent.collectionIds.includes(normalizedSourceCollectionId)
+    ) {
+      return;
+    }
+
+    const hasTarget = libraryState.collections.some(
+      (collection) => collection.id === normalizedTargetCollectionId
+    );
+    if (!hasTarget) {
+      return;
+    }
+    try {
+      const movedComponent = await libraryRepository.moveComponentToCollection(
+        componentId,
+        normalizedSourceCollectionId,
+        normalizedTargetCollectionId
+      );
       await notifyLibraryUpdated({
         type: "LIBRARY_UPDATED",
         payload: {
@@ -252,10 +415,10 @@ export function App() {
           component: movedComponent
         }
       });
-      await refreshLibraryState(libraryState.selectedCollectionId, setLibraryState, setStatusMessage);
-      setStatusMessage("Component added to collection");
+      await refreshLibraryState(selectedCollectionId, setLibraryState, setStatusMessage);
+      setStatusMessage("Component moved to collection");
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Could not add component to collection");
+      setStatusMessage(error instanceof Error ? error.message : "Could not move component to collection");
     }
   };
 
@@ -275,22 +438,33 @@ export function App() {
           collectionId: sourceComponent.collectionIds[0]
         }
       });
-      await refreshLibraryState(libraryState.selectedCollectionId, setLibraryState, setStatusMessage);
+      await refreshLibraryState(selectedCollectionId, setLibraryState, setStatusMessage);
+      removeComponent(componentId);
       setStatusMessage("Component deleted");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Could not delete component");
     }
   };
 
+  const effectiveSelectedCollectionId = selectedCollectionId ?? libraryState.selectedCollectionId;
   const selectedCollection =
-    libraryState.collections.find((collection) => collection.id === libraryState.selectedCollectionId) ?? null;
-  const selectedComponents =
-    (libraryState.selectedCollectionId && libraryState.componentsByCollectionId[libraryState.selectedCollectionId]) ||
-    [];
+    libraryState.collections.find((collection) => collection.id === effectiveSelectedCollectionId) ?? null;
+  const selectedComponents = effectiveSelectedCollectionId
+    ? libraryState.componentsByCollectionId[effectiveSelectedCollectionId] ?? []
+    : [];
   const componentCounts = mapComponentCounts(libraryState.componentsByCollectionId);
-  const activeComponent = activeComponentId
-    ? getComponentById(libraryState.componentsByCollectionId, activeComponentId)
+  const activeComponent = selectedComponentId
+    ? getComponentById(libraryState.componentsByCollectionId, selectedComponentId)
     : null;
+
+  const isHydratingPopupState = !hasHydrated || hydrateStatus === "hydrating";
+  if (isHydratingPopupState) {
+    return (
+      <main className="flex h-popup-h w-full max-w-full items-center justify-center overflow-x-hidden bg-surface p-4">
+        <p className="text-xs text-muted-foreground">Restoring last view...</p>
+      </main>
+    );
+  }
 
   const isLoadingLibrary = libraryState.isLoading && libraryState.collections.length === 0;
   if (isLoadingLibrary) {
@@ -312,7 +486,7 @@ export function App() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <CollectionRail
           collections={libraryState.collections}
-          selectedCollectionId={libraryState.selectedCollectionId}
+          selectedCollectionId={effectiveSelectedCollectionId}
           componentCounts={componentCounts}
           onSelectCollection={(collectionId) => {
             void handleSelectCollection(collectionId);
@@ -332,13 +506,27 @@ export function App() {
           collection={selectedCollection}
           collections={libraryState.collections}
           components={selectedComponents}
+          activeCollectionId={effectiveSelectedCollectionId}
           activeComponent={activeComponent}
-          onOpenDetails={setActiveComponentId}
-          onCloseDetails={() => {
-            setActiveComponentId(null);
+          isPreviewStarting={isPreviewStarting}
+          onStartPreview={(component, activeCollectionId) => {
+            void handlePreviewStart(component, activeCollectionId);
           }}
-          onMoveComponentToCollection={(componentId, targetCollectionId) => {
-            void handleMoveComponentToCollection(componentId, targetCollectionId);
+          onOpenDetails={(componentId) => {
+            const activeCollectionId = effectiveSelectedCollectionId;
+            if (!activeCollectionId) {
+              return;
+            }
+            openComponentCanvas(activeCollectionId, componentId);
+          }}
+          onCloseDetails={() => {
+            closeComponentCanvas();
+          }}
+          onCopyComponentToCollection={(componentId, targetCollectionId) => {
+            void handleCopyComponentToCollection(componentId, targetCollectionId);
+          }}
+          onMoveComponentToCollection={(componentId, sourceCollectionId, targetCollectionId) => {
+            void handleMoveComponentToCollection(componentId, sourceCollectionId, targetCollectionId);
           }}
           onDeleteComponent={(componentId) => {
             void handleDeleteComponent(componentId);
@@ -426,6 +614,26 @@ function resolveSelectedCollectionId(input: {
     }
   }
   return input.collections[0]?.id ?? null;
+}
+
+function resolveActiveCollectionId(input: {
+  collections: Collection[];
+  selectedCollectionId: string | null;
+  libraryStateSelectedCollectionId: string | null;
+  activeCollectionIdFromUi?: string | null;
+}): string | null {
+  const existingIds = new Set(input.collections.map((collection) => collection.id));
+  const candidates = [
+    input.activeCollectionIdFromUi,
+    input.selectedCollectionId,
+    input.libraryStateSelectedCollectionId
+  ];
+  for (const candidate of candidates) {
+    if (candidate && existingIds.has(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 function getComponentById(

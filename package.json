@@ -3,13 +3,21 @@
   "private": true,
   "scripts": {
     "clean": "rm -rf dist",
-    "build:workers": "bun build extension/src/background.ts --outfile dist/background.js --target browser --format iife && bunx tsc -p tsconfig.content.json",
-    "popup:build": "bunx vite build --config vite.popup.config.ts",
-    "popup:dev": "bunx vite build --config vite.popup.config.ts --watch",
-    "popup:hmr": "bunx vite --config vite.popup.config.ts --open /popup.dev.html",
-    "build": "bun run clean && bun run build:workers && bun run popup:build",
-    "typecheck": "bunx tsc -p tsconfig.background.json --noEmit && bunx tsc -p tsconfig.content.json --noEmit && bunx tsc -p tsconfig.popup.json --noEmit",
-    "dev": "bun run build && bun run typecheck"
+    "build:background": "bun build extension/src/background.ts --outfile dist/background.js --target browser --format iife",
+    "build:content": "bun build extension/src/content.ts --outfile dist/content.js --target browser --format iife",
+    "build:preview": "bunx vite build --config vite.preview.config.ts",
+    "build:popup": "bunx vite build --config vite.popup.config.ts",
+    "build": "bun run clean && bun run build:background && bun run build:content && bun run build:preview && bun run build:popup",
+    "dev:popup:watch": "bunx vite build --config vite.popup.config.ts --watch",
+    "dev:popup:hmr": "bunx vite --config vite.popup.config.ts --open /popup.dev.html",
+    "typecheck:background": "bunx tsc -p tsconfig.background.json --noEmit",
+    "typecheck:content": "bunx tsc -p tsconfig.content.json --noEmit",
+    "typecheck:popup": "bunx tsc -p tsconfig.popup.json --noEmit",
+    "typecheck": "bun run typecheck:background && bun run typecheck:content && bun run typecheck:popup",
+    "check": "bun run build && bun run typecheck",
+    "test": "bunx vitest run",
+    "test:watch": "bunx vitest",
+    "dev": "bun run dev:popup:hmr"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.2.16",
@@ -24,11 +32,14 @@
     "react": "latest",
     "react-dom": "latest",
     "tailwind-merge": "latest",
-    "three": "^0.183.2"
+    "three": "^0.183.2",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@rolldown/plugin-babel": "latest",
     "@tailwindcss/vite": "latest",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/chrome": "^0.1.38",
     "@types/react": "latest",
     "@types/react-dom": "latest",
@@ -36,9 +47,12 @@
     "@vitejs/plugin-react": "latest",
     "babel-plugin-react-compiler": "latest",
     "chrome-types": "latest",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^29.0.1",
     "shadcn": "^4.1.0",
     "tailwindcss": "latest",
     "typescript": "latest",
-    "vite": "latest"
+    "vite": "latest",
+    "vitest": "^4.1.2"
   }
 }

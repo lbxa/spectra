@@ -91,6 +91,15 @@ function installPopupDevChromeShim(): void {
         async set(nextValues: Record<string, unknown>): Promise<void> {
           const current = readDevStorageState();
           writeDevStorageState({ ...current, ...nextValues });
+        },
+        async remove(keys: string | string[]): Promise<void> {
+          const current = readDevStorageState();
+          const keysToRemove = Array.isArray(keys) ? keys : [keys];
+          const next = { ...current };
+          for (const key of keysToRemove) {
+            delete next[key];
+          }
+          writeDevStorageState(next);
         }
       }
     }

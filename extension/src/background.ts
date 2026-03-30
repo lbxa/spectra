@@ -1,11 +1,22 @@
 import {
   isIncomingRuntimeMessage,
+  isPreviewStatusMessage,
   type LibraryUpdatedMessage,
   type SaveComponentPayload,
   type SaveComponentResponse
 } from "./lib/library/messages";
 import { libraryRepository } from "./lib/library/repository";
 import { INBOX_COLLECTION_ID, type SavedComponent } from "./lib/library/types";
+import { injectCaptureRuntime } from "./background/injector";
+import { generateCapturePreview, processComponentThumbnail } from "./background/image-processing";
+import { handlePreviewStatus, handleStartPreview } from "./background/message-router";
+import {
+  clearCaptureTargetCollectionId,
+  clearPreviewSession,
+  getCaptureTargetCollectionId,
+  setCaptureTargetCollectionId
+} from "./background/session-store";
+import { assertCaptureSupportedTab, requireActiveTab } from "./background/tab-gate";
 
 type Bounds = {
   left: number;
@@ -20,11 +31,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 
   try {
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      files: ["content.js"],
-      world: "ISOLATED"
-    });
+    await injectCaptureRuntime(tab.id);
   } catch (error) {
     console.error("Failed to inject content script from action click:", error);
   }
@@ -36,13 +43,32 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   }
 
   if (message.type === "START_CAPTURE") {
-    injectContentScript()
+    if (!message.activeCollectionId?.trim()) {
+      sendResponse({
+        ok: false,
+        error: "Missing active collection id"
+      } satisfies SaveComponentResponse);
+      return false;
+    }
+    injectContentScript(message.activeCollectionId)
       .then(() => sendResponse({ ok: true } satisfies SaveComponentResponse))
       .catch((error: unknown) => {
         console.error("Failed to start capture:", error);
         sendResponse({
           ok: false,
-          error: error instanceof Error ? error.message : "Unable to start capture."
+          error: error instanceof Error ? error.message : "Unable to start capture"
+        } satisfies SaveComponentResponse);
+      });
+    return true;
+  }
+
+  if (message.type === "START_PREVIEW") {
+    handleStartPreview(message)
+      .then((response) => sendResponse(response))
+      .catch((error: unknown) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Unable to start preview"
         } satisfies SaveComponentResponse);
       });
     return true;
@@ -50,47 +76,55 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 
   if (message.type === "SAVE_COMPONENT") {
     handleSaveComponent(message.payload, sender)
-      .then(() => sendResponse({ ok: true } satisfies SaveComponentResponse))
+      .then((previewDataUrl) =>
+        sendResponse({
+          ok: true,
+          previewDataUrl: previewDataUrl ?? undefined
+        } satisfies SaveComponentResponse)
+      )
       .catch((error: unknown) => {
         console.error("Failed to save component:", error);
         sendResponse({
           ok: false,
-          error: error instanceof Error ? error.message : "Unable to save component."
+          error: error instanceof Error ? error.message : "Unable to save component"
         } satisfies SaveComponentResponse);
       });
     return true;
   }
 
+  if (isPreviewStatusMessage(message)) {
+    handlePreviewStatus(message, sender).catch((error: unknown) => {
+      console.error("Failed to process preview status:", error);
+    });
+    return false;
+  }
+
   return false;
 });
 
-async function injectContentScript(): Promise<void> {
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-  if (!tab || typeof tab.id !== "number") {
-    throw new Error("No active tab available.");
-  }
-  if (!isCaptureSupportedUrl(tab.url)) {
-    throw new Error("Capture is not available on this page. Open an http(s) webpage and try again.");
-  }
+chrome.tabs.onRemoved.addListener((tabId) => {
+  void clearPreviewSession(tabId);
+  void clearCaptureTargetCollectionId(tabId);
+});
 
-  await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    files: ["content.js"],
-    world: "ISOLATED"
-  });
-}
-
-function isCaptureSupportedUrl(url: string | undefined): boolean {
-  if (typeof url !== "string" || url.length === 0) {
-    return false;
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === "loading" || typeof changeInfo.url === "string") {
+    void clearPreviewSession(tabId);
+    void clearCaptureTargetCollectionId(tabId);
   }
-  return url.startsWith("http://") || url.startsWith("https://");
+});
+
+async function injectContentScript(activeCollectionId: string): Promise<void> {
+  const tab = await requireActiveTab();
+  await assertCaptureSupportedTab(tab.id!);
+  await setCaptureTargetCollectionId(tab.id!, activeCollectionId);
+  await injectCaptureRuntime(tab.id!);
 }
 
 async function handleSaveComponent(
   payload: SaveComponentPayload,
   sender: chrome.runtime.MessageSender
-): Promise<void> {
+): Promise<string | null> {
   await libraryRepository.initLibrary();
   validatePayload(payload);
 
@@ -103,17 +137,28 @@ async function handleSaveComponent(
     payload.bounds,
     payload.devicePixelRatio
   );
+  const thumbnailMeta = await processComponentThumbnail(croppedDataUrl);
+  const tabId = sender.tab?.id;
+  const captureCollectionId =
+    typeof tabId === "number" ? await getCaptureTargetCollectionId(tabId) : null;
+  const targetCollectionId = captureCollectionId ?? INBOX_COLLECTION_ID;
 
   const record: SavedComponent = {
     id: typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}`,
-    collectionIds: [INBOX_COLLECTION_ID],
+    collectionIds: [targetCollectionId],
     url: payload.url,
     title: payload.title,
     capturedAt: new Date().toISOString(),
     html: payload.html,
-    screenshotDataUrl: croppedDataUrl
+    cssText: payload.cssText,
+    screenshotDataUrl: croppedDataUrl,
+    thumbnailMeta: thumbnailMeta ?? undefined,
+    sourceHostSignature: payload.sourceHostSignature
   };
   const savedComponent = await libraryRepository.saveComponent(record);
+  if (typeof tabId === "number") {
+    await clearCaptureTargetCollectionId(tabId);
+  }
   await notifyLibraryUpdated({
     type: "LIBRARY_UPDATED",
     payload: {
@@ -122,6 +167,7 @@ async function handleSaveComponent(
       collectionId: savedComponent.collectionIds[0]
     }
   });
+  return generateCapturePreview(croppedDataUrl);
 }
 
 function validatePayload(payload: SaveComponentPayload): void {
@@ -130,6 +176,9 @@ function validatePayload(payload: SaveComponentPayload): void {
   }
   if (typeof payload.html !== "string" || payload.html.length === 0) {
     throw new Error("Missing selected HTML.");
+  }
+  if (typeof payload.cssText !== "string") {
+    throw new Error("Missing selected CSS.");
   }
   if (typeof payload.url !== "string" || payload.url.length === 0) {
     throw new Error("Missing page URL.");
@@ -157,6 +206,9 @@ function validatePayload(payload: SaveComponentPayload): void {
     payload.devicePixelRatio <= 0
   ) {
     throw new Error("Invalid device pixel ratio.");
+  }
+  if (!payload.sourceHostSignature || typeof payload.sourceHostSignature !== "object") {
+    throw new Error("Missing host signature.");
   }
 }
 

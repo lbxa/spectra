@@ -79,7 +79,24 @@ function createMockFixtures(): SavedComponent[] {
       title: `${variant.title} ${index + 1}`,
       capturedAt: new Date(baseTimestamp - index * 60_000).toISOString(),
       html: variant.html,
-      screenshotDataUrl: FALLBACK_THUMBNAIL
+      cssText: "",
+      screenshotDataUrl: FALLBACK_THUMBNAIL,
+      thumbnailMeta: {
+        originalWidth: 400,
+        originalHeight: 300,
+        aspectRatio: 4 / 3,
+        dominantColor: "#8aa8c7",
+        blurredBackdropDataUrl: FALLBACK_THUMBNAIL
+      },
+      sourceHostSignature: {
+        landmark: "unknown",
+        hostTag: "div",
+        layoutMode: "unknown",
+        widthBucket: "md",
+        depth: 0,
+        siblingCount: 0,
+        ancestorTags: []
+      }
     });
   }
 

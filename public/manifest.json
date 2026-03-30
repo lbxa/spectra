@@ -20,6 +20,11 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["activeTab", "scripting", "storage", "tabs"],
-  "host_permissions": ["http://*/*", "https://*/*"]
+  "permissions": ["activeTab", "scripting", "storage"],
+  "web_accessible_resources": [
+    {
+      "resources": ["audio/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

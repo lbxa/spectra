@@ -4,16 +4,24 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Collection, SavedComponent } from "@/lib/library/types";
 import { useState } from "react";
 import { ComponentCard } from "./ComponentCard";
-import { ComponentDetailModal } from "./ComponentDetailModal";
+import { ComponentCanvas } from "./ComponentCanvas";
 
 type LibraryGridProps = {
   collection: Collection | null;
   collections: Collection[];
   components: SavedComponent[];
+  activeCollectionId: string | null;
   activeComponent: SavedComponent | null;
+  isPreviewStarting: boolean;
+  onStartPreview: (component: SavedComponent, activeCollectionId: string | null) => void;
   onOpenDetails: (componentId: string) => void;
   onCloseDetails: () => void;
-  onMoveComponentToCollection: (componentId: string, targetCollectionId: string) => void;
+  onCopyComponentToCollection: (componentId: string, targetCollectionId: string) => void;
+  onMoveComponentToCollection: (
+    componentId: string,
+    sourceCollectionId: string,
+    targetCollectionId: string
+  ) => void;
   onDeleteComponent: (componentId: string) => void;
   onDeleteCollection: (collectionId: string) => void;
 };
@@ -22,9 +30,13 @@ export function LibraryGrid({
   collection,
   collections,
   components,
+  activeCollectionId,
   activeComponent,
+  isPreviewStarting,
+  onStartPreview,
   onOpenDetails,
   onCloseDetails,
+  onCopyComponentToCollection,
   onMoveComponentToCollection,
   onDeleteComponent,
   onDeleteCollection
@@ -105,8 +117,11 @@ export function LibraryGrid({
                 onDeleteConfirmOpenChange={(open) => {
                   setPendingDeleteComponentId(open ? component.id : null);
                 }}
+                onStartPreview={onStartPreview}
                 onOpenDetails={onOpenDetails}
+                onCopyComponentToCollection={onCopyComponentToCollection}
                 onMoveComponentToCollection={onMoveComponentToCollection}
+                activeCollectionId={activeCollectionId}
                 onDeleteComponent={onDeleteComponent}
               />
             ))}
@@ -115,8 +130,11 @@ export function LibraryGrid({
       </ScrollArea>
 
       {activeComponent ? (
-        <ComponentDetailModal
+        <ComponentCanvas
           component={activeComponent}
+          activeCollectionId={activeCollectionId}
+          isPreviewStarting={isPreviewStarting}
+          onStartPreview={onStartPreview}
           onClose={onCloseDetails}
           className="absolute inset-0 z-20"
         />

@@ -14,6 +14,7 @@ export type PopupSavedComponent = {
 
 export type PopupStartCaptureMessage = {
   type: "START_CAPTURE";
+  activeCollectionId: string;
 };
 
 export type PopupSaveComponentResponse = {

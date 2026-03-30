@@ -14,6 +14,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Collection, SavedComponent } from "@/lib/library/types";
 import { cn } from "@/lib/utils";
+import { Check, FolderOpen, Play, Trash2 } from "lucide-react";
 import { forwardRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { formatCapturedAt } from "../../lib/format-timestamp";
 import { FALLBACK_THUMBNAIL } from "../../types";
@@ -21,78 +22,101 @@ import { FALLBACK_THUMBNAIL } from "../../types";
 type ComponentCardProps = {
   component: SavedComponent;
   collections: Collection[];
+  activeCollectionId: string | null;
   isDeleteConfirmOpen: boolean;
   onDeleteConfirmOpenChange: (open: boolean) => void;
+  onStartPreview: (component: SavedComponent, activeCollectionId: string | null) => void;
   onOpenDetails: (componentId: string) => void;
-  onMoveComponentToCollection: (componentId: string, targetCollectionId: string) => void;
+  onCopyComponentToCollection: (componentId: string, targetCollectionId: string) => void;
+  onMoveComponentToCollection: (
+    componentId: string,
+    sourceCollectionId: string,
+    targetCollectionId: string
+  ) => void;
   onDeleteComponent: (componentId: string) => void;
 };
 
 export function ComponentCard({
   component,
   collections,
+  activeCollectionId,
   isDeleteConfirmOpen,
   onDeleteConfirmOpenChange,
+  onStartPreview,
   onOpenDetails,
+  onCopyComponentToCollection,
   onMoveComponentToCollection,
   onDeleteComponent
 }: ComponentCardProps) {
   const [isMovePickerOpen, setIsMovePickerOpen] = useState(false);
   const hasMoveOptions = collections.length > 0;
+  const hasMoveShortcutOptions = Boolean(activeCollectionId) && hasMoveOptions;
   const isInCollection = (collectionId: string): boolean => component.collectionIds.includes(collectionId);
+  const screenshotSrc = component.screenshotDataUrl || FALLBACK_THUMBNAIL;
 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <Card className="overflow-hidden rounded-md shadow-none">
+        <Card
+          className="cursor-pointer overflow-hidden rounded-md border border-border bg-(--color-card-glass) backdrop-blur-sm"
+          onClick={() => {
+            onOpenDetails(component.id);
+          }}
+        >
           <CardContent className="p-0">
-            <img
-              className="block h-card-thumb-h w-full border-b border-border bg-surface object-cover"
-              alt={component.title || "Captured component"}
-              src={component.screenshotDataUrl || FALLBACK_THUMBNAIL}
-            />
-            <div className="grid gap-1.5 p-2">
+            <div className="relative aspect-4/3 overflow-hidden border-b border-border/70 bg-canvas-grid">
+              <div className="absolute inset-0 flex items-center justify-center p-2">
+                <img
+                  className="block h-auto w-auto max-h-full max-w-full rounded-sm"
+                  alt={component.title || "Captured component"}
+                  src={screenshotSrc}
+                />
+              </div>
+            </div>
+            <div className="grid gap-1 p-2">
               <h3 className="truncate text-xs font-semibold text-foreground">
                 {component.title || "Untitled component"}
               </h3>
               <p className="truncate text-[11px] text-muted-foreground">{hostnameFromUrl(component.url)}</p>
-              <p className="text-[10px] text-muted-foreground">{formatCapturedAt(component.capturedAt)}</p>
-              <div className="mt-0.5 flex flex-wrap justify-end gap-1.5">
+              <p className="text-[10px] text-muted-foreground/70">{formatCapturedAt(component.capturedAt)}</p>
+              <div className="mt-1 flex flex-wrap justify-end gap-1.5">
                 <ComponentActionButton
-                  ariaLabel="Open details"
+                  ariaLabel="Start preview"
                   onClick={() => {
-                    onOpenDetails(component.id);
+                    onStartPreview(component, activeCollectionId);
                   }}
                 >
-                  <DetailsIcon />
+                  <Play className="h-4 w-4" aria-hidden="true" />
                 </ComponentActionButton>
-                {hasMoveOptions ? (
+                {hasMoveShortcutOptions ? (
                   <Popover open={isMovePickerOpen} onOpenChange={setIsMovePickerOpen}>
                     <PopoverTrigger asChild>
                       <ComponentActionButton ariaLabel="Move component">
-                        <MoveIcon />
+                        <FolderOpen className="h-4 w-4" aria-hidden="true" />
                       </ComponentActionButton>
                     </PopoverTrigger>
                     <PopoverContent align="end" className="w-menu-w p-1">
                       <div className="grid">
                           {collections.map((collection) => {
-                            const alreadyInCollection = isInCollection(collection.id);
+                            const isSourceCollection = collection.id === activeCollectionId;
                             return (
                               <button
                                 key={collection.id}
                                 type="button"
-                                disabled={alreadyInCollection}
+                                disabled={isSourceCollection}
                                 className="hover:bg-surface-subtle focus:bg-surface-subtle disabled:hover:bg-transparent flex items-center justify-between rounded-sm px-2 py-1.5 text-left text-[11px] font-medium text-foreground outline-none disabled:cursor-default disabled:opacity-60"
                                 onClick={() => {
-                                  if (alreadyInCollection) {
+                                  if (!activeCollectionId || isSourceCollection) {
                                     return;
                                   }
                                   setIsMovePickerOpen(false);
-                                  onMoveComponentToCollection(component.id, collection.id);
+                                  onMoveComponentToCollection(component.id, activeCollectionId, collection.id);
                                 }}
                               >
                                 <span>{collection.name}</span>
-                                {alreadyInCollection ? <CheckIcon /> : null}
+                                {isSourceCollection ? (
+                                  <Check className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                                ) : null}
                               </button>
                             );
                           })}
@@ -103,7 +127,7 @@ export function ComponentCard({
                 <Popover open={isDeleteConfirmOpen} onOpenChange={onDeleteConfirmOpenChange}>
                   <PopoverTrigger asChild>
                     <ComponentActionButton ariaLabel="Delete component">
-                      <DeleteIcon />
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </ComponentActionButton>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-menu-wide-w p-2">
@@ -150,7 +174,7 @@ export function ComponentCard({
         </ContextMenuItem>
         {hasMoveOptions ? (
           <ContextMenuSub>
-            <ContextMenuSubTrigger>Move to</ContextMenuSubTrigger>
+            <ContextMenuSubTrigger>Copy to</ContextMenuSubTrigger>
             <ContextMenuSubContent className="w-menu-w p-1">
               <ContextMenuGroup>
                 {collections.map((collection) => {
@@ -164,11 +188,43 @@ export function ComponentCard({
                         if (alreadyInCollection) {
                           return;
                         }
-                        onMoveComponentToCollection(component.id, collection.id);
+                        onCopyComponentToCollection(component.id, collection.id);
                       }}
                     >
                       <span>{collection.name}</span>
-                      {alreadyInCollection ? <CheckIcon /> : null}
+                      {alreadyInCollection ? (
+                        <Check className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                      ) : null}
+                    </ContextMenuItem>
+                  );
+                })}
+              </ContextMenuGroup>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        ) : null}
+        {hasMoveOptions && activeCollectionId ? (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>Move to</ContextMenuSubTrigger>
+            <ContextMenuSubContent className="w-menu-w p-1">
+              <ContextMenuGroup>
+                {collections.map((collection) => {
+                  const isSourceCollection = collection.id === activeCollectionId;
+                  return (
+                    <ContextMenuItem
+                      key={`move-${collection.id}`}
+                      disabled={isSourceCollection}
+                      className="justify-between"
+                      onSelect={() => {
+                        if (isSourceCollection) {
+                          return;
+                        }
+                        onMoveComponentToCollection(component.id, activeCollectionId, collection.id);
+                      }}
+                    >
+                      <span>{collection.name}</span>
+                      {isSourceCollection ? (
+                        <Check className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                      ) : null}
                     </ContextMenuItem>
                   );
                 })}
@@ -196,7 +252,7 @@ type ComponentActionButtonProps = {
 } & ButtonHTMLAttributes<HTMLButtonElement>;
 
 const ComponentActionButton = forwardRef<HTMLButtonElement, ComponentActionButtonProps>(
-  ({ ariaLabel, children, className, type = "button", ...props }, ref) => {
+  ({ ariaLabel, children, className, type = "button", onClick, ...props }, ref) => {
     return (
       <button
         ref={ref}
@@ -206,6 +262,10 @@ const ComponentActionButton = forwardRef<HTMLButtonElement, ComponentActionButto
           className
         )}
         aria-label={ariaLabel}
+        onClick={(event) => {
+          event.stopPropagation();
+          onClick?.(event);
+        }}
         {...props}
       >
         {children}
@@ -215,91 +275,6 @@ const ComponentActionButton = forwardRef<HTMLButtonElement, ComponentActionButto
 );
 
 ComponentActionButton.displayName = "ComponentActionButton";
-
-function MoveIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-4 w-4"
-      aria-hidden="true"
-    >
-      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-    </svg>
-  );
-}
-
-function DetailsIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-4 w-4"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <path d="M17 12h.01" />
-      <path d="M12 12h.01" />
-      <path d="M7 12h.01" />
-    </svg>
-  );
-}
-
-function DeleteIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-4 w-4"
-      aria-hidden="true"
-    >
-      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-      <path d="M3 6h18" />
-      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-3.5 w-3.5 text-muted-foreground"
-      aria-hidden="true"
-    >
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
-}
 
 function hostnameFromUrl(url: string): string {
   try {
