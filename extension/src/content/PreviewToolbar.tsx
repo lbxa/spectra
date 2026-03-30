@@ -82,8 +82,8 @@ export function PreviewToolbar({
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
-          className="z-2147483648 w-12 rounded-md border-[rgba(148,163,184,0.4)] bg-[rgba(15,23,42,0.98)] text-slate-50 shadow-[0_14px_30px_rgba(0,0,0,0.35)]"
-          style={{ zIndex: 2147483647 }}
+          className="w-12 rounded-md border-[rgba(148,163,184,0.4)] bg-[rgba(15,23,42,0.98)] text-slate-50 shadow-[0_14px_30px_rgba(0,0,0,0.35)]"
+          style={{ zIndex: 2147483648 }}
         >
           <DropdownMenuGroup>
             {RELATION_OPTIONS.map((option) => {
