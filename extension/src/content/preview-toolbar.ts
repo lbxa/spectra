@@ -10,7 +10,6 @@ export type PreviewToolbarControls = {
 };
 
 export function createPreviewToolbar(
-  host: HTMLElement,
   handlers: {
     onUndo: () => void;
     onRetarget: () => void;
@@ -18,6 +17,11 @@ export function createPreviewToolbar(
     onAlignmentChange: (alignment: PreviewAlignment) => void;
   }
 ): PreviewToolbarControls {
+  const host = document.createElement("div");
+  host.style.position = "fixed";
+  host.style.display = "none";
+  host.style.pointerEvents = "auto";
+  host.style.zIndex = "2147483647";
   const container = document.createElement("div");
   let root: Root | null = null;
   let cleanupAutoUpdate: (() => void) | null = null;
@@ -40,6 +44,9 @@ export function createPreviewToolbar(
 
   return {
     mount(target, currentRelation, currentAlignment) {
+      if (!host.isConnected) {
+        document.documentElement.appendChild(host);
+      }
       if (!container.isConnected) {
         host.appendChild(container);
       }
@@ -68,6 +75,7 @@ export function createPreviewToolbar(
       root = null;
       host.style.display = "none";
       container.remove();
+      host.remove();
     }
   };
 }

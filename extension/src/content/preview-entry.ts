@@ -5,7 +5,7 @@ import { scanCandidateContainers, type CandidateContainer } from "./candidate-sc
 import { updateGhostPlacement } from "./ghost-placement";
 import { watchPreviewRemoval, type PreviewMutationWatcher } from "./mutation-watch";
 import { mountOverlayRoot, type OverlayRoot } from "./overlay-root";
-import { insertPreview, removeExistingPreview, type InsertedPreview } from "./preview-insert";
+import { insertPreview, type InsertedPreview } from "./preview-insert";
 import { createPreviewToolbar, type PreviewToolbarControls } from "./preview-toolbar";
 
 type PreviewState = "idle" | "targeting" | "inserted";
@@ -24,9 +24,18 @@ type PreviewSession = {
   overlay: OverlayRoot | null;
   candidates: CandidateContainer[];
   activeCandidate: CandidateContainer | null;
-  inserted: InsertedPreview | null;
-  toolbar: PreviewToolbarControls | null;
-  watcher: PreviewMutationWatcher | null;
+  insertedById: Map<string, InsertedPreviewState>;
+  activePreviewId: string | null;
+};
+
+type InsertedPreviewState = {
+  inserted: InsertedPreview;
+  toolbar: PreviewToolbarControls;
+  watcher: PreviewMutationWatcher;
+  host: HTMLElement;
+  component: SavedComponent;
+  relation: InsertionRelation;
+  alignment: PreviewAlignment;
 };
 
 (() => {
@@ -43,9 +52,8 @@ type PreviewSession = {
     overlay: null,
     candidates: [],
     activeCandidate: null,
-    inserted: null,
-    toolbar: null,
-    watcher: null
+    insertedById: new Map(),
+    activePreviewId: null
   };
 
   const onRuntimeMessage = (message: unknown): void => {
@@ -93,8 +101,11 @@ type PreviewSession = {
       resetToIdle();
       return;
     }
-    if (event.key === "Delete" && session.state === "inserted") {
-      removeInsertedPreview();
+    if (event.key === "Delete" && session.insertedById.size > 0) {
+      const previewId = session.activePreviewId ?? getLastInsertedPreviewId();
+      if (previewId) {
+        removeInsertedPreviewById(previewId);
+      }
     }
   };
 
@@ -115,12 +126,6 @@ type PreviewSession = {
     session.state = "targeting";
     session.relation = "inside";
     session.alignment = "start";
-    session.inserted = null;
-    session.toolbar?.unmount();
-    session.toolbar = null;
-    session.watcher?.stop();
-    session.watcher = null;
-    removeExistingPreview();
 
     const candidates = scanCandidateContainers();
     if (candidates.length === 0) {
@@ -149,7 +154,7 @@ type PreviewSession = {
   async function commitInsert(candidate: CandidateContainer, component: SavedComponent): Promise<void> {
     const overlay = ensureOverlay();
     const inserted = insertPreview(candidate.element, component, session.relation, session.alignment);
-    session.inserted = inserted;
+    registerInsertedPreview(inserted, candidate.element, component, session.relation, session.alignment);
     session.state = "inserted";
     overlay.hoverOutline.style.display = "none";
     overlay.ghost.style.display = "none";
@@ -158,42 +163,6 @@ type PreviewSession = {
     showRect(overlay.selectedOutline, wrapperRect);
     overlay.label.style.display = "none";
 
-    session.toolbar = createPreviewToolbar(overlay.controlsHost, {
-      onUndo: () => {
-        removeInsertedPreview();
-      },
-      onRetarget: () => {
-        removeInsertedPreview();
-        if (session.component) {
-          void beginTargeting({ type: "BEGIN_TARGETING", component: session.component });
-        }
-      },
-      onRelationChange: (relation) => {
-        session.relation = relation;
-        if (!session.component || !session.activeCandidate) {
-          return;
-        }
-        removeInsertedPreview(false);
-        void commitInsert(session.activeCandidate, session.component);
-      },
-      onAlignmentChange: (alignment) => {
-        session.alignment = alignment;
-        if (!session.component || !session.activeCandidate) {
-          return;
-        }
-        removeInsertedPreview(false);
-        void commitInsert(session.activeCandidate, session.component);
-      }
-    });
-    session.toolbar.mount(inserted.wrapper, session.relation, session.alignment);
-
-    session.watcher = watchPreviewRemoval(inserted.previewId, () => {
-      overlay.showToast("Preview removed by page update");
-      void sendStatus({ type: "PREVIEW_REMOVED", previewId: inserted.previewId });
-      removeInsertedPreview(false);
-      resetToIdle();
-    });
-
     await sendStatus({
       type: "PREVIEW_INSERTED",
       previewId: inserted.previewId,
@@ -201,19 +170,22 @@ type PreviewSession = {
     });
   }
 
-  function removeInsertedPreview(notify: boolean = true): void {
-    if (!session.inserted) {
+  function removeInsertedPreviewById(previewId: string, notify: boolean = true): void {
+    const insertedState = session.insertedById.get(previewId);
+    if (!insertedState) {
       return;
     }
-    const previewId = session.inserted.previewId;
-    session.inserted.wrapper.remove();
-    session.inserted = null;
-    session.watcher?.stop();
-    session.watcher = null;
-    session.toolbar?.unmount();
-    session.toolbar = null;
-    session.state = "idle";
-    session.overlay?.selectedOutline && (session.overlay.selectedOutline.style.display = "none");
+    insertedState.watcher.stop();
+    insertedState.toolbar.unmount();
+    insertedState.inserted.wrapper.remove();
+    session.insertedById.delete(previewId);
+    session.state = session.insertedById.size > 0 ? "inserted" : "idle";
+    if (session.activePreviewId === previewId) {
+      session.activePreviewId = getLastInsertedPreviewId();
+    }
+    if (session.overlay) {
+      session.overlay.selectedOutline.style.display = "none";
+    }
     if (notify) {
       void sendStatus({ type: "PREVIEW_REMOVED", previewId });
     }
@@ -232,9 +204,90 @@ type PreviewSession = {
     }
   }
 
+  function registerInsertedPreview(
+    inserted: InsertedPreview,
+    host: HTMLElement,
+    component: SavedComponent,
+    relation: InsertionRelation,
+    alignment: PreviewAlignment
+  ): void {
+    const toolbar = createPreviewToolbar({
+      onUndo: () => {
+        markPreviewAsActive(inserted.previewId);
+        removeInsertedPreviewById(inserted.previewId);
+      },
+      onRetarget: () => {
+        markPreviewAsActive(inserted.previewId);
+        removeInsertedPreviewById(inserted.previewId);
+        session.component = component;
+        void beginTargeting({ type: "BEGIN_TARGETING", component });
+      },
+      onRelationChange: (nextRelation) => {
+        markPreviewAsActive(inserted.previewId);
+        replaceInsertedPreviewPlacement(inserted.previewId, nextRelation);
+      },
+      onAlignmentChange: (nextAlignment) => {
+        markPreviewAsActive(inserted.previewId);
+        replaceInsertedPreviewPlacement(inserted.previewId, undefined, nextAlignment);
+      }
+    });
+    toolbar.mount(inserted.wrapper, relation, alignment);
+
+    const watcher = watchPreviewRemoval(inserted.previewId, () => {
+      session.overlay?.showToast("Preview removed by page update");
+      void sendStatus({ type: "PREVIEW_REMOVED", previewId: inserted.previewId });
+      removeInsertedPreviewById(inserted.previewId, false);
+      if (session.state !== "targeting" && session.insertedById.size === 0) {
+        resetToIdle();
+      }
+    });
+
+    session.insertedById.set(inserted.previewId, {
+      inserted,
+      toolbar,
+      watcher,
+      host,
+      component,
+      relation,
+      alignment
+    });
+    markPreviewAsActive(inserted.previewId);
+  }
+
+  function replaceInsertedPreviewPlacement(
+    previewId: string,
+    nextRelation?: InsertionRelation,
+    nextAlignment?: PreviewAlignment
+  ): void {
+    const existing = session.insertedById.get(previewId);
+    if (!existing) {
+      return;
+    }
+
+    const relation = nextRelation ?? existing.relation;
+    const alignment = nextAlignment ?? existing.alignment;
+    removeInsertedPreviewById(previewId, false);
+
+    const inserted = insertPreview(existing.host, existing.component, relation, alignment);
+    registerInsertedPreview(inserted, existing.host, existing.component, relation, alignment);
+  }
+
+  function markPreviewAsActive(previewId: string): void {
+    session.activePreviewId = previewId;
+  }
+
+  function getLastInsertedPreviewId(): string | null {
+    const keys = Array.from(session.insertedById.keys());
+    return keys.at(-1) ?? null;
+  }
+
   function teardown(): void {
-    session.watcher?.stop();
-    session.toolbar?.unmount();
+    for (const preview of session.insertedById.values()) {
+      preview.watcher.stop();
+      preview.toolbar.unmount();
+      preview.inserted.wrapper.remove();
+    }
+    session.insertedById.clear();
     session.overlay?.destroy();
     document.removeEventListener("mousemove", onPointerMove, true);
     document.removeEventListener("click", onClick, true);

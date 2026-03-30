@@ -75,6 +75,14 @@ describe("createPickerUi", () => {
     expect(document.querySelector("[data-component-picker-flash='true']")).not.toBeNull();
     const preview = document.querySelector("[data-component-picker-capture-preview='true']");
     expect(preview).not.toBeNull();
+    if (!(preview instanceof HTMLImageElement)) {
+      throw new Error("Expected preview image");
+    }
+    expect(preview.style.width).toBe("auto");
+    expect(preview.style.height).toBe("auto");
+    expect(preview.style.maxWidth).toBe("120px");
+    expect(preview.style.maxHeight).toBe("120px");
+    expect(preview.style.objectFit).toBe("contain");
 
     await vi.advanceTimersByTimeAsync(4000);
     await flushUi();

@@ -27,6 +27,7 @@ function createCaptureFixture(): { parent: HTMLElement; child: HTMLElement } {
 
   const child = document.createElement("button");
   child.id = "child-target";
+  child.className = "sample";
   child.textContent = "capture";
   child.getBoundingClientRect = () => new DOMRect(24, 28, 80, 32);
 
@@ -158,11 +159,18 @@ describe("content.ts characterization", () => {
         type: "SAVE_COMPONENT",
         payload: expect.objectContaining({
           html: expect.any(String),
-          cssText: expect.stringContaining(".sample"),
+          cssText: expect.stringContaining("/*__spectra_scoped_css_v1__*/"),
           bounds: expect.objectContaining({ width: 80, height: 32 }),
           sourceHostSignature: expect.objectContaining({
             hostTag: "button"
           })
+        })
+      })
+    );
+    expect(sendMessageSpy.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          cssText: expect.stringContaining('[data-spectra-capture-root="')
         })
       })
     );
@@ -174,6 +182,47 @@ describe("content.ts characterization", () => {
     const postCaptureMouseDown = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
     child.dispatchEvent(postCaptureMouseDown);
     expect(postCaptureMouseDown.defaultPrevented).toBe(false);
+  });
+
+  it("plays optimistic jingle and delays flash until save resolves", async () => {
+    const { child } = createCaptureFixture();
+    const runtime = getChromeRuntime();
+    let resolveSaveResponse: ((value: { ok: true }) => void) | null = null;
+    runtime.sendMessage = vi.fn(
+      () =>
+        new Promise<{ ok: true }>((resolve) => {
+          resolveSaveResponse = resolve;
+        })
+    );
+    runtime.getURL = (path) => `chrome-extension://test/${path}`;
+
+    const originalAudio = globalThis.Audio;
+    const playSpy = vi.fn(async () => undefined);
+    const audioCtorSpy = vi.fn(function (this: { volume: number; play: () => Promise<void> }, _src: string) {
+      this.volume = 1;
+      this.play = playSpy;
+    });
+    Reflect.set(globalThis, "Audio", audioCtorSpy as unknown as typeof Audio);
+
+    try {
+      await loadContentRuntime();
+      child.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await flushCaptureWork();
+
+      expect(document.querySelector("[data-component-picker-flash='true']")).toBeNull();
+      expect(document.querySelector("[data-component-picker-toast='true']")).toBeNull();
+      const playedSources = audioCtorSpy.mock.calls.map(([source]) => String(source));
+      expect(playedSources).toContain("chrome-extension://test/audio/jingle.wav");
+
+      expect(resolveSaveResponse).not.toBeNull();
+      resolveSaveResponse!({ ok: true });
+      await flushCaptureWork();
+
+      expect(document.querySelector("[data-component-picker-flash='true']")).not.toBeNull();
+      expect(document.querySelector("[data-component-picker-toast='true']")?.textContent).toContain("Component captured");
+    } finally {
+      Reflect.set(globalThis, "Audio", originalAudio);
+    }
   });
 
   it("removes success toast after visible and transition durations", async () => {
@@ -208,6 +257,9 @@ describe("content.ts characterization", () => {
 
   it("uses the parent target when shift-clicking", async () => {
     const { parent, child } = createCaptureFixture();
+    const nestedStyle = document.createElement("style");
+    nestedStyle.textContent = ".nested-style-target { color: blue; }";
+    parent.appendChild(nestedStyle);
     const runtime = getChromeRuntime();
     const sendMessageSpy = vi.fn<(message: unknown) => Promise<{ ok: true }>>(async () => ({ ok: true }));
     runtime.sendMessage = sendMessageSpy;
@@ -229,6 +281,47 @@ describe("content.ts characterization", () => {
     expect(typeof html).toBe("string");
     expect(html).toContain(`<section id="${parent.id}"`);
     expect(html).toContain(`id="${child.id}"`);
+    expect(html).not.toContain("<style style=");
+  });
+
+  it("clips capture bounds to the visible viewport before sending SAVE_COMPONENT", async () => {
+    const runtime = getChromeRuntime();
+    const sendMessageSpy = vi.fn<(message: unknown) => Promise<{ ok: true }>>(async () => ({ ok: true }));
+    runtime.sendMessage = sendMessageSpy;
+
+    const originalInnerWidth = window.innerWidth;
+    const originalInnerHeight = window.innerHeight;
+    Object.defineProperty(window, "innerWidth", { value: 100, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 100, configurable: true });
+
+    const target = document.createElement("div");
+    target.textContent = "off-screen target";
+    target.getBoundingClientRect = () => new DOMRect(-20, 10, 40, 120);
+    document.body.appendChild(target);
+
+    try {
+      await loadContentRuntime();
+      target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await flushCaptureWork();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { value: originalInnerWidth, configurable: true });
+      Object.defineProperty(window, "innerHeight", { value: originalInnerHeight, configurable: true });
+    }
+
+    expect(sendMessageSpy).toHaveBeenCalledOnce();
+    expect(sendMessageSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "SAVE_COMPONENT",
+        payload: expect.objectContaining({
+          bounds: {
+            left: 0,
+            top: 10,
+            width: 20,
+            height: 90
+          }
+        })
+      })
+    );
   });
 
   it.each([
@@ -248,6 +341,34 @@ describe("content.ts characterization", () => {
     expect(document.querySelector("[data-component-picker-toast='true']")?.textContent).toContain(expectedToast);
   });
 
+  it("plays error jingle when optimistic capture fails", async () => {
+    const { child } = createCaptureFixture();
+    const runtime = getChromeRuntime();
+    runtime.sendMessage = vi.fn(async () => ({ ok: false, error: "random failure" }));
+    runtime.getURL = (path) => `chrome-extension://test/${path}`;
+
+    const originalAudio = globalThis.Audio;
+    const playSpy = vi.fn(async () => undefined);
+    const audioCtorSpy = vi.fn(function (this: { volume: number; play: () => Promise<void> }, _src: string) {
+      this.volume = 1;
+      this.play = playSpy;
+    });
+    Reflect.set(globalThis, "Audio", audioCtorSpy as unknown as typeof Audio);
+
+    try {
+      await loadContentRuntime();
+      child.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await flushCaptureWork();
+
+      const playedSources = audioCtorSpy.mock.calls.map(([source]) => String(source));
+      expect(playedSources).toContain("chrome-extension://test/audio/jingle.wav");
+      expect(playedSources).toContain("chrome-extension://test/audio/error.wav");
+      expect(document.querySelector("[data-component-picker-toast='true']")?.textContent).toContain("Capture failed");
+    } finally {
+      Reflect.set(globalThis, "Audio", originalAudio);
+    }
+  });
+
   it("toggles parent overlay visibility when shift is pressed while hovering", async () => {
     const { child } = createCaptureFixture();
     await loadContentRuntime();
@@ -264,6 +385,219 @@ describe("content.ts characterization", () => {
 
     document.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
     expect(parentOverlay.style.display).toBe("none");
+  });
+
+  it("keeps zero border widths when border style is solid", async () => {
+    const target = document.createElement("button");
+    target.className = "border-zero-case";
+    target.textContent = "icon host";
+    document.body.appendChild(target);
+
+    const style = document.createElement("style");
+    style.textContent = `.border-zero-case { border-style: solid; border-width: 0; border-color: rgb(0, 0, 0); }`;
+    document.head.appendChild(style);
+
+    const runtime = getChromeRuntime();
+    const sendMessageSpy = vi.fn<(message: unknown) => Promise<{ ok: true }>>(async () => ({ ok: true }));
+    runtime.sendMessage = sendMessageSpy;
+
+    await loadContentRuntime();
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushCaptureWork();
+
+    const [firstCallArg] = sendMessageSpy.mock.calls[0] ?? [];
+    if (!firstCallArg || typeof firstCallArg !== "object") {
+      throw new Error("Expected SAVE_COMPONENT payload");
+    }
+    const payload = Reflect.get(firstCallArg, "payload");
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Expected payload object");
+    }
+    const html = Reflect.get(payload, "html");
+    if (typeof html !== "string") {
+      throw new Error("Expected captured html string");
+    }
+
+    expect(html).toContain("border-width: 0px");
+  });
+
+  it("keeps explicit zero spacing used by icon buttons", async () => {
+    const target = document.createElement("button");
+    target.className = "icon-align-case";
+    target.textContent = "icon";
+    document.body.appendChild(target);
+
+    const style = document.createElement("style");
+    style.textContent = `.icon-align-case { margin: 0; padding: 0; line-height: 1; }`;
+    document.head.appendChild(style);
+
+    const runtime = getChromeRuntime();
+    const sendMessageSpy = vi.fn<(message: unknown) => Promise<{ ok: true }>>(async () => ({ ok: true }));
+    runtime.sendMessage = sendMessageSpy;
+
+    await loadContentRuntime();
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushCaptureWork();
+
+    const [firstCallArg] = sendMessageSpy.mock.calls[0] ?? [];
+    if (!firstCallArg || typeof firstCallArg !== "object") {
+      throw new Error("Expected SAVE_COMPONENT payload");
+    }
+    const payload = Reflect.get(firstCallArg, "payload");
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Expected payload object");
+    }
+    const html = Reflect.get(payload, "html");
+    if (typeof html !== "string") {
+      throw new Error("Expected captured html string");
+    }
+
+    expect(html).toContain("margin: 0px");
+    expect(html).toContain("padding: 0px");
+  });
+
+  it("keeps protected default typography values when explicitly authored", async () => {
+    const target = document.createElement("div");
+    target.className = "typography-default-case";
+    target.textContent = "Typography";
+    document.body.appendChild(target);
+
+    const style = document.createElement("style");
+    style.textContent = `.typography-default-case { text-transform: none; letter-spacing: normal; text-align: start; }`;
+    document.head.appendChild(style);
+
+    const runtime = getChromeRuntime();
+    const sendMessageSpy = vi.fn<(message: unknown) => Promise<{ ok: true }>>(async () => ({ ok: true }));
+    runtime.sendMessage = sendMessageSpy;
+
+    await loadContentRuntime();
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushCaptureWork();
+
+    const [firstCallArg] = sendMessageSpy.mock.calls[0] ?? [];
+    if (!firstCallArg || typeof firstCallArg !== "object") {
+      throw new Error("Expected SAVE_COMPONENT payload");
+    }
+    const payload = Reflect.get(firstCallArg, "payload");
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Expected payload object");
+    }
+    const html = Reflect.get(payload, "html");
+    if (typeof html !== "string") {
+      throw new Error("Expected captured html string");
+    }
+
+    expect(html).toContain("text-transform: none");
+    expect(html).toContain("letter-spacing: normal");
+  });
+
+  it("keeps protected default overflow and interaction values", async () => {
+    const target = document.createElement("div");
+    target.className = "interaction-default-case";
+    target.textContent = "Interaction";
+    document.body.appendChild(target);
+
+    const style = document.createElement("style");
+    style.textContent = `.interaction-default-case { overflow: visible; pointer-events: auto; user-select: auto; }`;
+    document.head.appendChild(style);
+
+    const runtime = getChromeRuntime();
+    const sendMessageSpy = vi.fn<(message: unknown) => Promise<{ ok: true }>>(async () => ({ ok: true }));
+    runtime.sendMessage = sendMessageSpy;
+
+    await loadContentRuntime();
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushCaptureWork();
+
+    const [firstCallArg] = sendMessageSpy.mock.calls[0] ?? [];
+    if (!firstCallArg || typeof firstCallArg !== "object") {
+      throw new Error("Expected SAVE_COMPONENT payload");
+    }
+    const payload = Reflect.get(firstCallArg, "payload");
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Expected payload object");
+    }
+    const html = Reflect.get(payload, "html");
+    if (typeof html !== "string") {
+      throw new Error("Expected captured html string");
+    }
+
+    expect(html).toContain("overflow: visible");
+    expect(html).toContain("pointer-events: auto");
+    expect(html).toContain("user-select: auto");
+  });
+
+  it("keeps protected default appearance values", async () => {
+    const target = document.createElement("button");
+    target.className = "appearance-default-case";
+    target.textContent = "Button";
+    document.body.appendChild(target);
+
+    const style = document.createElement("style");
+    style.textContent = `.appearance-default-case { appearance: none; }`;
+    document.head.appendChild(style);
+
+    const runtime = getChromeRuntime();
+    const sendMessageSpy = vi.fn<(message: unknown) => Promise<{ ok: true }>>(async () => ({ ok: true }));
+    runtime.sendMessage = sendMessageSpy;
+
+    await loadContentRuntime();
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushCaptureWork();
+
+    const [firstCallArg] = sendMessageSpy.mock.calls[0] ?? [];
+    if (!firstCallArg || typeof firstCallArg !== "object") {
+      throw new Error("Expected SAVE_COMPONENT payload");
+    }
+    const payload = Reflect.get(firstCallArg, "payload");
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Expected payload object");
+    }
+    const html = Reflect.get(payload, "html");
+    if (typeof html !== "string") {
+      throw new Error("Expected captured html string");
+    }
+
+    expect(html).toContain("appearance: none");
+  });
+
+  it("keeps protected default SVG geometry values", async () => {
+    const target = document.createElement("svg");
+    target.classList.add("svg-default-case");
+    target.setAttribute("viewBox", "0 0 16 16");
+    target.innerHTML = `<path d="M1 1L15 15" />`;
+    document.body.appendChild(target);
+
+    const style = document.createElement("style");
+    style.textContent = `.svg-default-case path { stroke: rgb(0, 0, 0); stroke-width: 1px; stroke-linecap: butt; stroke-linejoin: miter; stroke-opacity: 1; fill-opacity: 1; }`;
+    document.head.appendChild(style);
+
+    const runtime = getChromeRuntime();
+    const sendMessageSpy = vi.fn<(message: unknown) => Promise<{ ok: true }>>(async () => ({ ok: true }));
+    runtime.sendMessage = sendMessageSpy;
+
+    await loadContentRuntime();
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushCaptureWork();
+
+    const [firstCallArg] = sendMessageSpy.mock.calls[0] ?? [];
+    if (!firstCallArg || typeof firstCallArg !== "object") {
+      throw new Error("Expected SAVE_COMPONENT payload");
+    }
+    const payload = Reflect.get(firstCallArg, "payload");
+    if (!payload || typeof payload !== "object") {
+      throw new Error("Expected payload object");
+    }
+    const html = Reflect.get(payload, "html");
+    if (typeof html !== "string") {
+      throw new Error("Expected captured html string");
+    }
+
+    expect(html).toContain("stroke-width: 1px");
+    expect(html).toContain("stroke-linecap: butt");
+    expect(html).toContain("stroke-linejoin: miter");
+    expect(html).toContain("stroke-opacity: 1");
+    expect(html).toContain("fill-opacity: 1");
   });
 
   it("updates the shift shortcut key visual state", async () => {

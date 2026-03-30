@@ -336,7 +336,7 @@ export function App() {
     }
   };
 
-  const handleMoveComponentToCollection = async (
+  const handleCopyComponentToCollection = async (
     componentId: string,
     targetCollectionId: string
   ): Promise<void> => {
@@ -357,7 +357,57 @@ export function App() {
       return;
     }
     try {
-      const movedComponent = await libraryRepository.moveComponent(componentId, normalizedTargetCollectionId);
+      const copiedComponent = await libraryRepository.copyComponentToCollection(
+        componentId,
+        normalizedTargetCollectionId
+      );
+      await notifyLibraryUpdated({
+        type: "LIBRARY_UPDATED",
+        payload: {
+          event: "COMPONENT_MOVED",
+          component: copiedComponent
+        }
+      });
+      await refreshLibraryState(selectedCollectionId, setLibraryState, setStatusMessage);
+      setStatusMessage("Component copied to collection");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Could not copy component to collection");
+    }
+  };
+
+  const handleMoveComponentToCollection = async (
+    componentId: string,
+    sourceCollectionId: string,
+    targetCollectionId: string
+  ): Promise<void> => {
+    const sourceComponent = getComponentById(libraryState.componentsByCollectionId, componentId);
+    if (!sourceComponent) {
+      return;
+    }
+
+    const normalizedSourceCollectionId = sourceCollectionId.trim();
+    const normalizedTargetCollectionId = targetCollectionId.trim();
+    if (
+      !normalizedSourceCollectionId ||
+      !normalizedTargetCollectionId ||
+      normalizedSourceCollectionId === normalizedTargetCollectionId ||
+      !sourceComponent.collectionIds.includes(normalizedSourceCollectionId)
+    ) {
+      return;
+    }
+
+    const hasTarget = libraryState.collections.some(
+      (collection) => collection.id === normalizedTargetCollectionId
+    );
+    if (!hasTarget) {
+      return;
+    }
+    try {
+      const movedComponent = await libraryRepository.moveComponentToCollection(
+        componentId,
+        normalizedSourceCollectionId,
+        normalizedTargetCollectionId
+      );
       await notifyLibraryUpdated({
         type: "LIBRARY_UPDATED",
         payload: {
@@ -366,9 +416,9 @@ export function App() {
         }
       });
       await refreshLibraryState(selectedCollectionId, setLibraryState, setStatusMessage);
-      setStatusMessage("Component added to collection");
+      setStatusMessage("Component moved to collection");
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Could not add component to collection");
+      setStatusMessage(error instanceof Error ? error.message : "Could not move component to collection");
     }
   };
 
@@ -472,8 +522,11 @@ export function App() {
           onCloseDetails={() => {
             closeComponentCanvas();
           }}
-          onMoveComponentToCollection={(componentId, targetCollectionId) => {
-            void handleMoveComponentToCollection(componentId, targetCollectionId);
+          onCopyComponentToCollection={(componentId, targetCollectionId) => {
+            void handleCopyComponentToCollection(componentId, targetCollectionId);
+          }}
+          onMoveComponentToCollection={(componentId, sourceCollectionId, targetCollectionId) => {
+            void handleMoveComponentToCollection(componentId, sourceCollectionId, targetCollectionId);
           }}
           onDeleteComponent={(componentId) => {
             void handleDeleteComponent(componentId);

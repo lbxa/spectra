@@ -9,12 +9,15 @@ Chrome Extension (Manifest V3) for capturing visible UI elements as reusable ref
 
 ## Project Structure
 
-- `extension/manifest.json`: extension metadata and permissions.
-- `extension/src/content.ts`: selection overlay and HTML snapshot extraction.
+- `public/manifest.json`: extension metadata and permissions.
+- `extension/src/content.ts`: selection overlay and capture runtime entrypoint.
+- `extension/src/content/capture-snapshot.ts`: scoped CSS extraction, sanitization, and asset URL rewriting.
 - `extension/src/background.ts`: screenshot capture/crop and local persistence.
-- `extension/src/popup.ts`: popup rendering, replay iframe, copy actions.
+- `extension/src/content/preview-insert.ts`: page preview insertion and CSS compatibility paths.
+- `extension/src/popup.tsx` + `extension/src/popup/*`: popup UI and library workflow.
 - `samples/v1/*`: pre-pruning extraction outputs.
 - `samples/v2/*`: post-pruning extraction outputs.
+- `samples/v3/*`: hybrid capture outputs used for token/fidelity comparisons.
 
 ## File Naming Convention
 
@@ -31,64 +34,36 @@ bun run typecheck
 bun run build
 ```
 
-## Extraction Pruning Efficiency (Recent Changes)
+## Snapshot Capture Architecture (Fidelity-First)
 
-The extraction pipeline was optimized to reduce snapshot size while preserving replay fidelity.
+The capture pipeline uses a single persisted artifact:
 
-### What Changed
+- **Primary artifact (fidelity-locked)**:
+  - `html`: cloned subtree with inline computed styles.
+  - `cssText`: selector-matched, scope-prefixed stylesheet rules with marker `/*__spectra_scoped_css_v1__*/`.
+  - Used for preview insertion and local persistence.
+  - Optimized in-place with conservative default/no-op suppression to reduce redundant style output.
 
-1. Filtered CSS serialization in `extension/src/content.ts`
-   - Replaced full computed-style dumping with a property allowlist focused on visual/layout-critical CSS.
-   - Dropped custom properties (`--*`) from per-node inline style output.
-   - Dropped vendor-prefixed `-webkit-*` properties in exported inline styles.
-   - Added targeted filtering for default/no-op values (for example `filter: none`, `transform: none`, zero-duration transitions/animations, etc.).
+### Non-Negotiable Policy
 
-2. Sanitization of noisy attributes in `extension/src/content.ts`
-   - Removed inline event handlers (`on*`).
-   - Removed `data-*` attributes.
-   - Removed `class` attributes from cloned output.
-   - Removed empty `style` attributes.
+- Visual fidelity quality must be preserved.
+- Optimization changes must not degrade preview insertion behavior for:
+  - marker-tagged scoped CSS payloads, and
+  - legacy unmarked CSS payloads (runtime scope fallback).
+- Redundancy removal and compaction happen on the primary artifact only when fidelity-safe.
 
-3. Storage protection in `extension/src/background.ts`
-   - Added a snapshot-size soft guard before `chrome.storage.local.set`.
-   - Uses ~90% of `chrome.storage.local.QUOTA_BYTES` as a practical safety threshold.
-   - Returns a clear error when a capture would exceed safe storage size.
+### Capture Pipeline Summary
 
-4. User-facing error handling in popup/content
-   - Added explicit messaging for oversized snapshots so failure reason is clear and actionable.
+1. Clone selected subtree.
+2. Inline computed styles per allowlist/default-filter policy.
+3. Sanitize unsafe nodes/attributes and rewrite asset URLs.
+4. Collect selector-matched stylesheet rules scoped to capture root.
+5. Persist primary artifact (`html`, marker `cssText`) plus screenshot and metadata.
 
-### Performance Impact
+### Verification Gates
 
-Measured from sample captures.
-
-Bash script used:
-
-```bash
-for f in "samples/v2"/*.html; do
-  b=$(basename "$f")
-  v1="samples/v1/$b"
-  if [ -f "$v1" ]; then
-    size_v1=$(wc -c < "$v1" | tr -d ' ')
-    size_v2=$(wc -c < "$f" | tr -d ' ')
-    diff=$((size_v1 - size_v2))
-    pct=$(awk -v a="$size_v1" -v b="$size_v2" 'BEGIN{printf "%.2f", (1-(b/a))*100}')
-    ratio=$(awk -v a="$size_v1" -v b="$size_v2" 'BEGIN{printf "%.2f", a/b}')
-    printf "%s,%s,%s,%s,%s,%s\n" "$b" "$size_v1" "$size_v2" "$diff" "$pct" "$ratio"
-  fi
-done
-```
-
-| Component | v1 size (bytes) | v2 size (bytes) | bytes saved | reduction | shrink ratio |
-| --- | ---:| ---:| ---:| ---:| ---:|
-| `figma-design-button.html` | 1,633,632 | 42,161 | 1,591,471 | 97.42% | 38.75x |
-| `pinterest-nav.html` | 7,998,725 | 167,342 | 7,831,383 | 97.91% | 47.80x |
-
-### Why This Improves Performance
-
-- **Faster capture serialization**: fewer properties written per node.
-- **Lower storage pressure**: dramatically smaller HTML payloads reduce risk of quota failures.
-- **Better popup responsiveness**: smaller `srcdoc` snapshots improve iframe replay load/render time.
-- **More reliable saves**: explicit size guard fails early with clear guidance instead of opaque storage errors.
+- **Efficiency gate**: primary capture artifact should be materially smaller on representative noisy captures after default/no-op suppression changes.
+- **Fidelity gate**: preview insertion behavior and marker/legacy compatibility tests must remain green.
 
 ## Current Product Behavior
 
@@ -97,7 +72,7 @@ Capture flow:
 1. Start capture from popup.
 2. Hover to preview target bounds.
 3. Click an element to save:
-   - standalone HTML snapshot (pruned inline styles),
+   - standalone primary artifact (`html` + marker-scoped `cssText`),
    - cropped screenshot,
    - metadata.
-4. Open popup to review screenshot vs replay and copy HTML (or HTML + CSS, same inline snapshot payload).
+4. Open popup to review screenshot vs replay and copy raw HTML when needed.

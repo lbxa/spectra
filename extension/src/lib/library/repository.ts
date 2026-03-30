@@ -11,8 +11,8 @@ import {
   type ThumbnailMeta
 } from "./types";
 
-const DATABASE_NAME = "spectra-library";
-const DATABASE_VERSION = 3;
+const DATABASE_NAME = "spectra-library-v2";
+const DATABASE_VERSION = 1;
 
 const LIBRARY_META_STORE = "libraryMeta";
 const COLLECTIONS_STORE = "collections";
@@ -21,13 +21,6 @@ const COMPONENTS_BY_COLLECTION_INDEX = "byCollectionId";
 
 const COLLECTION_NAME_MAX_LENGTH = 60;
 const COLLECTION_DESCRIPTION_MAX_LENGTH = 280;
-
-type LegacySavedComponent = Omit<SavedComponent, "collectionIds"> & {
-  collectionId?: string;
-  collectionIds?: string[];
-  cssText?: string;
-  sourceHostSignature?: HostSignature;
-};
 
 class IndexedDbLibraryRepository implements LibraryRepository {
   private static instance: IndexedDbLibraryRepository | null = null;
@@ -177,33 +170,27 @@ class IndexedDbLibraryRepository implements LibraryRepository {
           throw new Error("Collection not found.");
         }
 
-        const inbox = await requestToPromise<Collection | undefined>(collectionStore.get(INBOX_COLLECTION_ID));
-        if (!inbox) {
-          throw new Error("Inbox collection is missing.");
-        }
-
         const byCollectionIndex = componentStore.index(COMPONENTS_BY_COLLECTION_INDEX);
-        const linkedComponents = await requestToPromise<LegacySavedComponent[]>(byCollectionIndex.getAll(id));
+        const linkedComponents = await requestToPromise<SavedComponent[]>(byCollectionIndex.getAll(id));
         const now = new Date().toISOString();
 
         for (const candidate of linkedComponents) {
           const component = normalizeStoredComponent(candidate, INBOX_COLLECTION_ID);
-          const nextCollectionIds = component.collectionIds.filter((collectionId) => collectionId !== id);
-          const resolvedCollectionIds =
-            nextCollectionIds.length > 0 ? Array.from(new Set(nextCollectionIds)) : [INBOX_COLLECTION_ID];
-          const movedComponent: SavedComponent = {
+          const nextCollectionIds = Array.from(
+            new Set(component.collectionIds.filter((collectionId) => collectionId !== id))
+          );
+          if (nextCollectionIds.length === 0) {
+            componentStore.delete(component.id);
+            continue;
+          }
+          const updatedComponent: SavedComponent = {
             ...component,
-            collectionIds: resolvedCollectionIds
+            collectionIds: nextCollectionIds
           };
-          componentStore.put(movedComponent);
+          componentStore.put(updatedComponent);
         }
 
         collectionStore.delete(id);
-        const updatedInbox: Collection = {
-          ...inbox,
-          updatedAt: now
-        };
-        collectionStore.put(updatedInbox);
 
         const meta = await requestToPromise<LibraryMeta | undefined>(libraryMetaStore.get(LIBRARY_ID));
         if (meta) {
@@ -223,9 +210,9 @@ class IndexedDbLibraryRepository implements LibraryRepository {
       const componentStore = transaction.objectStore(COMPONENTS_STORE);
       if (collectionId) {
         const byCollectionIndex = componentStore.index(COMPONENTS_BY_COLLECTION_INDEX);
-        return requestToPromise<LegacySavedComponent[]>(byCollectionIndex.getAll(collectionId));
+        return requestToPromise<SavedComponent[]>(byCollectionIndex.getAll(collectionId));
       }
-      return requestToPromise<LegacySavedComponent[]>(componentStore.getAll());
+      return requestToPromise<SavedComponent[]>(componentStore.getAll());
     });
     return components
       .map((component) => normalizeStoredComponent(component, INBOX_COLLECTION_ID))
@@ -240,7 +227,7 @@ class IndexedDbLibraryRepository implements LibraryRepository {
 
     return this.readonlyTransaction([COMPONENTS_STORE], async (transaction) => {
       const componentStore = transaction.objectStore(COMPONENTS_STORE);
-      const component = await requestToPromise<LegacySavedComponent | undefined>(componentStore.get(id));
+      const component = await requestToPromise<SavedComponent | undefined>(componentStore.get(id));
       if (!component) {
         return null;
       }
@@ -298,7 +285,7 @@ class IndexedDbLibraryRepository implements LibraryRepository {
     return savedComponent;
   }
 
-  async moveComponent(id: string, targetCollectionId: string): Promise<SavedComponent> {
+  async copyComponentToCollection(id: string, targetCollectionId: string): Promise<SavedComponent> {
     await this.initLibraryState();
     if (!id) {
       throw new Error("Component id is required.");
@@ -319,7 +306,7 @@ class IndexedDbLibraryRepository implements LibraryRepository {
           throw new Error("Library metadata is missing.");
         }
 
-        const existing = await requestToPromise<LegacySavedComponent | undefined>(componentStore.get(id));
+        const existing = await requestToPromise<SavedComponent | undefined>(componentStore.get(id));
         if (!existing) {
           throw new Error("Component not found.");
         }
@@ -336,9 +323,88 @@ class IndexedDbLibraryRepository implements LibraryRepository {
           return component;
         }
 
-        const movedComponent: SavedComponent = {
+        const copiedComponent: SavedComponent = {
           ...component,
           collectionIds: [...component.collectionIds, targetCollectionId]
+        };
+        componentStore.put(copiedComponent);
+
+        const now = new Date().toISOString();
+        const updatedTargetCollection: Collection = {
+          ...targetCollection,
+          updatedAt: now
+        };
+        collectionStore.put(updatedTargetCollection);
+
+        const updatedMeta: LibraryMeta = {
+          ...meta,
+          updatedAt: now
+        };
+        libraryMetaStore.put(updatedMeta);
+
+        return copiedComponent;
+      }
+    );
+  }
+
+  async moveComponentToCollection(
+    id: string,
+    sourceCollectionId: string,
+    targetCollectionId: string
+  ): Promise<SavedComponent> {
+    await this.initLibraryState();
+    if (!id) {
+      throw new Error("Component id is required.");
+    }
+    if (!sourceCollectionId.trim()) {
+      throw new Error("Source collection id is required.");
+    }
+    if (!targetCollectionId.trim()) {
+      throw new Error("Target collection id is required.");
+    }
+
+    return this.readwriteTransaction(
+      [COMPONENTS_STORE, COLLECTIONS_STORE, LIBRARY_META_STORE],
+      async (transaction) => {
+        const componentStore = transaction.objectStore(COMPONENTS_STORE);
+        const collectionStore = transaction.objectStore(COLLECTIONS_STORE);
+        const libraryMetaStore = transaction.objectStore(LIBRARY_META_STORE);
+
+        const meta = await requestToPromise<LibraryMeta | undefined>(libraryMetaStore.get(LIBRARY_ID));
+        if (!meta) {
+          throw new Error("Library metadata is missing.");
+        }
+
+        const existing = await requestToPromise<SavedComponent | undefined>(componentStore.get(id));
+        if (!existing) {
+          throw new Error("Component not found.");
+        }
+        const component = normalizeStoredComponent(existing, meta.defaultCollectionId);
+        if (!component.collectionIds.includes(sourceCollectionId)) {
+          throw new Error("Component is not in the source collection.");
+        }
+
+        const targetCollection = await requestToPromise<Collection | undefined>(
+          collectionStore.get(targetCollectionId)
+        );
+        if (!targetCollection) {
+          throw new Error("Target collection does not exist.");
+        }
+
+        if (sourceCollectionId === targetCollectionId) {
+          return component;
+        }
+
+        const nextCollectionIds = Array.from(
+          new Set(
+            component.collectionIds.map((collectionId) =>
+              collectionId === sourceCollectionId ? targetCollectionId : collectionId
+            )
+          )
+        );
+        const movedComponent: SavedComponent = {
+          ...component,
+          collectionIds: nextCollectionIds
         };
         componentStore.put(movedComponent);
 
@@ -348,6 +414,17 @@ class IndexedDbLibraryRepository implements LibraryRepository {
           updatedAt: now
         };
         collectionStore.put(updatedTargetCollection);
+
+        const sourceCollection = await requestToPromise<Collection | undefined>(
+          collectionStore.get(sourceCollectionId)
+        );
+        if (sourceCollection) {
+          const updatedSourceCollection: Collection = {
+            ...sourceCollection,
+            updatedAt: now
+          };
+          collectionStore.put(updatedSourceCollection);
+        }
 
         const updatedMeta: LibraryMeta = {
           ...meta,
@@ -376,7 +453,7 @@ class IndexedDbLibraryRepository implements LibraryRepository {
         throw new Error("Library metadata is missing.");
       }
 
-      const existing = await requestToPromise<LegacySavedComponent | undefined>(componentStore.get(id));
+      const existing = await requestToPromise<SavedComponent | undefined>(componentStore.get(id));
       if (!existing) {
         return;
       }
@@ -500,45 +577,15 @@ class IndexedDbLibraryRepository implements LibraryRepository {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
 
-      request.onupgradeneeded = (event) => {
+      request.onupgradeneeded = () => {
         const database = request.result;
-        const oldVersion = event.oldVersion;
-        if (!database.objectStoreNames.contains(LIBRARY_META_STORE)) {
-          database.createObjectStore(LIBRARY_META_STORE, { keyPath: "id" });
-        }
-        if (!database.objectStoreNames.contains(COLLECTIONS_STORE)) {
-          database.createObjectStore(COLLECTIONS_STORE, { keyPath: "id" });
-        }
-        if (!database.objectStoreNames.contains(COMPONENTS_STORE)) {
-          const componentStore = database.createObjectStore(COMPONENTS_STORE, { keyPath: "id" });
-          componentStore.createIndex(COMPONENTS_BY_COLLECTION_INDEX, "collectionIds", {
-            unique: false,
-            multiEntry: true
-          });
-        } else {
-          const transaction = request.transaction;
-          if (transaction) {
-            const componentStore = transaction.objectStore(COMPONENTS_STORE);
-            if (componentStore.indexNames.contains(COMPONENTS_BY_COLLECTION_INDEX)) {
-              const collectionIndex = componentStore.index(COMPONENTS_BY_COLLECTION_INDEX);
-              const hasLegacyIndexShape =
-                collectionIndex.keyPath !== "collectionIds" || collectionIndex.multiEntry !== true;
-              if (hasLegacyIndexShape) {
-                componentStore.deleteIndex(COMPONENTS_BY_COLLECTION_INDEX);
-              }
-            }
-            if (!componentStore.indexNames.contains(COMPONENTS_BY_COLLECTION_INDEX)) {
-              componentStore.createIndex(COMPONENTS_BY_COLLECTION_INDEX, "collectionIds", {
-                unique: false,
-                multiEntry: true
-              });
-            }
-
-            if (oldVersion < 3) {
-              migrateLegacyComponentMembership(componentStore);
-            }
-          }
-        }
+        database.createObjectStore(LIBRARY_META_STORE, { keyPath: "id" });
+        database.createObjectStore(COLLECTIONS_STORE, { keyPath: "id" });
+        const componentStore = database.createObjectStore(COMPONENTS_STORE, { keyPath: "id" });
+        componentStore.createIndex(COMPONENTS_BY_COLLECTION_INDEX, "collectionIds", {
+          unique: false,
+          multiEntry: true
+        });
       };
 
       request.onsuccess = () => {
@@ -625,31 +672,14 @@ function normalizeCollectionIds(collectionIds: string[] | undefined, defaultColl
   return fallbackCollectionId ? [fallbackCollectionId] : [INBOX_COLLECTION_ID];
 }
 
-function normalizeStoredComponent(component: LegacySavedComponent, defaultCollectionId: string): SavedComponent {
-  const collectionIds = normalizeCollectionIds(
-    component.collectionIds ?? (component.collectionId ? [component.collectionId] : []),
-    defaultCollectionId
-  );
+function normalizeStoredComponent(component: SavedComponent, defaultCollectionId: string): SavedComponent {
+  const collectionIds = normalizeCollectionIds(component.collectionIds, defaultCollectionId);
   const sourceHostSignature = normalizeHostSignature(component.sourceHostSignature);
   return {
     ...component,
     collectionIds,
     cssText: typeof component.cssText === "string" ? component.cssText : "",
     sourceHostSignature
-  };
-}
-
-function migrateLegacyComponentMembership(componentStore: IDBObjectStore): void {
-  const cursorRequest = componentStore.openCursor();
-  cursorRequest.onsuccess = () => {
-    const cursor = cursorRequest.result;
-    if (!cursor) {
-      return;
-    }
-
-    const normalized = normalizeStoredComponent(cursor.value as LegacySavedComponent, INBOX_COLLECTION_ID);
-    cursor.update(normalized);
-    cursor.continue();
   };
 }
 

@@ -1,5 +1,6 @@
 import type { InsertionRelation, PreviewAlignment } from "../lib/library/messages";
 import type { SavedComponent } from "../lib/library/types";
+import { unwrapScopedCss } from "./capture-snapshot";
 import { scopeCapturedCss } from "./css-scope";
 
 export type InsertedPreview = {
@@ -12,10 +13,21 @@ const WRAPPER_ATTR = "data-spectra-preview-id";
 const CONTENT_ATTR = "data-spectra-preview-content";
 const TOOLBAR_ATTR = "data-spectra-preview-toolbar";
 
-export function removeExistingPreview(): void {
-  const existing = document.querySelector(`[${WRAPPER_ATTR}]`);
+export function removePreviewById(previewId: string): void {
+  if (!previewId) {
+    return;
+  }
+  const existing = document.querySelector(`[${WRAPPER_ATTR}="${previewId}"]`);
   if (existing instanceof HTMLElement) {
     existing.remove();
+  }
+}
+
+export function removeAllPreviews(): void {
+  for (const existing of Array.from(document.querySelectorAll(`[${WRAPPER_ATTR}]`))) {
+    if (existing instanceof HTMLElement) {
+      existing.remove();
+    }
   }
 }
 
@@ -25,8 +37,6 @@ export function insertPreview(
   relation: InsertionRelation,
   alignment: PreviewAlignment
 ): InsertedPreview {
-  removeExistingPreview();
-
   const previewId = `preview_${Date.now()}`;
   const wrapper = document.createElement("div");
   wrapper.setAttribute(WRAPPER_ATTR, previewId);
@@ -42,10 +52,13 @@ export function insertPreview(
   content.setAttribute(CONTENT_ATTR, "true");
   content.innerHTML = component.html;
 
-  const scopedCss = scopeCapturedCss(component.cssText || "", `[${WRAPPER_ATTR}="${previewId}"]`);
-  if (scopedCss) {
+  const storedCss = unwrapScopedCss(component.cssText || "");
+  const cssText = storedCss.isScoped
+    ? storedCss.cssText
+    : scopeCapturedCss(storedCss.cssText, `[${WRAPPER_ATTR}="${previewId}"]`);
+  if (cssText) {
     const style = document.createElement("style");
-    style.textContent = scopedCss;
+    style.textContent = cssText;
     wrapper.appendChild(style);
   }
 

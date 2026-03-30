@@ -136,14 +136,6 @@ export function ComponentCanvas({
         <Background gap={22} size={1} color="rgba(26,140,255,0.14)" />
         <TopLeftMetadataCard component={component} />
         <TopCenterControlBar
-          onResetNodePosition={() => {
-            setNodes([
-              createComponentNode(component, INITIAL_NODE_POSITION, () => {
-                setFitSequence((current) => current + 1);
-              })
-            ]);
-            setFitSequence((current) => current + 1);
-          }}
           fitSequence={fitSequence}
           isCopied={isCopied}
           onCopyRaw={handleCopyRaw}
@@ -163,14 +155,12 @@ export function ComponentCanvas({
 }
 
 function TopCenterControlBar({
-  onResetNodePosition,
   fitSequence,
   isCopied,
   onCopyRaw,
   isPreviewStarting,
   onStartPreview
 }: {
-  onResetNodePosition: () => void;
   fitSequence: number;
   isCopied: boolean;
   onCopyRaw: () => Promise<void>;
@@ -214,15 +204,6 @@ function TopCenterControlBar({
           <PlusIcon />
         </ToolbarIconButton>
         <div className="mx-1 h-5 w-px bg-border-strong/70" />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 px-2 text-[11px] text-foreground"
-          onClick={onResetNodePosition}
-        >
-          Center
-        </Button>
         <div className="flex items-center">
           <Button
             type="button"

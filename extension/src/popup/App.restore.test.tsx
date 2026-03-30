@@ -40,7 +40,8 @@ vi.mock("@/lib/library/repository", () => ({
     createCollection: vi.fn(),
     updateCollection: vi.fn(),
     deleteCollection: vi.fn(),
-    moveComponent: vi.fn(),
+    copyComponentToCollection: vi.fn(),
+    moveComponentToCollection: vi.fn(),
     deleteComponent: vi.fn()
   }
 }));

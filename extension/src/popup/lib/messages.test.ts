@@ -62,10 +62,12 @@ describe("startPreview", () => {
   });
 
   it("throws when runtime response is not ok", async () => {
-    vi.mocked(chrome.runtime.sendMessage).mockResolvedValueOnce({
-      ok: false,
-      error: "boom"
-    });
+    vi.mocked(chrome.runtime.sendMessage).mockResolvedValueOnce(
+      ({
+        ok: false,
+        error: "boom"
+      } as unknown) as void
+    );
 
     await expect(startPreview(createComponent("cmp-1", "col-1"), "col-1")).rejects.toThrow("boom");
   });

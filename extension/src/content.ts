@@ -1,5 +1,11 @@
 import { getCaptureFailureMessage } from "./content/capture-runtime-bridge";
-import { rewriteAssetUrls, sanitizeClonedTree } from "./content/capture-snapshot";
+import {
+  collectMatchedScopedCssText,
+  createCaptureScopeSelector,
+  markScopedCss,
+  rewriteAssetUrls,
+  sanitizeClonedTree
+} from "./content/capture-snapshot";
 import { createPickerUi, type PickerUiApi } from "./content/picker-ui/PickerUiRoot";
 
 (() => {
@@ -54,6 +60,7 @@ type PickerWindow = Window & {
 };
 
 const FRAME_WAIT_TIMEOUT_MS = 120;
+const INLINE_STYLE_TAG_BLOCKLIST = new Set(["style", "script", "meta", "link", "title"]);
 
 const STYLE_PROPERTY_ALLOWLIST = new Set<string>([
   "display",
@@ -287,8 +294,87 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
   ["overflow-x", new Set(["visible"])],
   ["overflow-y", new Set(["visible"])],
   ["appearance", new Set(["none", "auto"])],
+  ["background-color", new Set(["transparent", "rgba(0, 0, 0, 0)", "rgba(0,0,0,0)"])],
+  ["background-position", new Set(["0% 0%"])],
+  ["background-size", new Set(["auto", "auto auto"])],
+  ["background-origin", new Set(["padding-box"])],
+  ["background-clip", new Set(["border-box"])],
+  ["object-fit", new Set(["fill"])],
+  ["object-position", new Set(["50% 50%"])],
+  ["place-self", new Set(["auto"])],
+  ["transform-style", new Set(["flat"])],
+  ["overflow-wrap", new Set(["normal"])],
+  ["vertical-align", new Set(["baseline"])],
+  ["cursor", new Set(["auto"])],
+  ["user-select", new Set(["auto"])],
+  ["word-break", new Set(["normal"])],
+  ["text-align", new Set(["start"])],
+  ["text-indent", new Set(["0px"])],
+  ["paint-order", new Set(["normal"])],
+  ["color-interpolation", new Set(["srgb"])],
+  ["color-interpolation-filters", new Set(["linearrgb"])],
+  ["fill-opacity", new Set(["1"])],
+  ["fill-rule", new Set(["nonzero"])],
+  ["stroke-dasharray", new Set(["none"])],
+  ["stroke-linecap", new Set(["butt"])],
+  ["stroke-linejoin", new Set(["miter"])],
+  ["stroke-miterlimit", new Set(["4"])],
+  ["stroke-opacity", new Set(["1"])],
+  ["stroke-width", new Set(["1px"])],
+  ["vector-effect", new Set(["none"])],
   ["d", new Set(["none"])]
 ]);
+const PROTECTED_DEFAULT_STYLE_PROPERTIES = new Set<string>([
+  "appearance",
+  "text-decoration-line",
+  "text-decoration-style",
+  "font-style",
+  "font-stretch",
+  "font-variant",
+  "letter-spacing",
+  "word-spacing",
+  "text-transform",
+  "text-overflow",
+  "text-align",
+  "text-indent",
+  "word-break",
+  "overflow-wrap",
+  "vertical-align",
+  "overflow",
+  "overflow-x",
+  "overflow-y",
+  "pointer-events",
+  "user-select",
+  "cursor",
+  "background-color",
+  "background-repeat",
+  "background-attachment",
+  "background-position",
+  "background-size",
+  "background-origin",
+  "background-clip",
+  "object-fit",
+  "object-position",
+  "fill-opacity",
+  "fill-rule",
+  "stroke-width",
+  "stroke-linecap",
+  "stroke-linejoin",
+  "stroke-miterlimit",
+  "stroke-dasharray",
+  "stroke-opacity",
+  "vector-effect",
+  "paint-order",
+  "color-interpolation",
+  "color-interpolation-filters",
+  "d"
+]);
+const NORMALIZED_DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>(
+  Array.from(DEFAULT_STYLE_VALUE_FILTERS.entries(), ([property, values]) => [
+    property,
+    new Set(Array.from(values, (value) => normalizeStyleValue(value)))
+  ])
+);
 
 (() => {
   const pickerWindow = window as PickerWindow;
@@ -355,27 +441,30 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
     const selectedTarget = resolveSelectedTarget(target, event.shiftKey);
     clearDocumentSelection();
     const rect = selectedTarget.getBoundingClientRect();
-    const snapshotHtml = buildStandaloneSnapshotHtml(selectedTarget);
+    const captureBounds = clampBoundsToVisibleViewport(rect);
+    const snapshot = buildStandaloneSnapshot(selectedTarget);
     const payload: SaveComponentPayload = {
-      html: snapshotHtml,
-      cssText: collectDocumentCssText(),
+      html: snapshot.html,
+      cssText: snapshot.cssText,
       url: window.location.href,
       title: document.title || "",
       bounds: {
-        left: rect.left,
-        top: rect.top,
-        width: rect.width,
-        height: rect.height
+        left: captureBounds.left,
+        top: captureBounds.top,
+        width: captureBounds.width,
+        height: captureBounds.height
       },
       devicePixelRatio: window.devicePixelRatio || 1,
       sourceHostSignature: computeLocalHostSignature(selectedTarget)
     };
 
     try {
-      const response = (await sendRuntimeMessage({
+      const saveRequest = sendRuntimeMessage({
         type: "SAVE_COMPONENT",
         payload
-      } satisfies SaveComponentMessage)) as SaveComponentResponse;
+      } satisfies SaveComponentMessage);
+      void playSound("jingle.wav");
+      const response = (await saveRequest) as SaveComponentResponse;
 
       if (!response?.ok) {
         throw new Error(response?.error || "Capture failed");
@@ -384,7 +473,6 @@ const DEFAULT_STYLE_VALUE_FILTERS = new Map<string, Set<string>>([
       if (response.previewDataUrl) {
         state.ui.showPreview(response.previewDataUrl);
       }
-      void playSound("jingle.wav");
       state.ui.showToast("Component captured");
       state.ui.destroyAfter(4000);
     } catch (error) {
@@ -511,11 +599,40 @@ function clearDocumentSelection(): void {
   window.getSelection()?.removeAllRanges();
 }
 
-function buildStandaloneSnapshotHtml(target: Element): string {
+function clampBoundsToVisibleViewport(rect: DOMRect): Bounds {
+  const viewportLeft = 0;
+  const viewportTop = 0;
+  const viewportRight = window.innerWidth;
+  const viewportBottom = window.innerHeight;
+
+  const clippedLeft = Math.max(viewportLeft, rect.left);
+  const clippedTop = Math.max(viewportTop, rect.top);
+  const clippedRight = Math.min(viewportRight, rect.right);
+  const clippedBottom = Math.min(viewportBottom, rect.bottom);
+
+  return {
+    left: clippedLeft,
+    top: clippedTop,
+    width: Math.max(0, clippedRight - clippedLeft),
+    height: Math.max(0, clippedBottom - clippedTop)
+  };
+}
+
+function buildStandaloneSnapshot(target: Element): {
+  html: string;
+  cssText: string;
+} {
   const clonedRoot = target.cloneNode(true);
   if (!(clonedRoot instanceof Element)) {
     throw new Error("Unable to clone selected element");
   }
+
+  const captureScopeId =
+    typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `capture_${Date.now()}_${Math.floor(Math.random() * 1_000_000)}`;
+  const captureScopeSelector = createCaptureScopeSelector(captureScopeId);
+  clonedRoot.setAttribute("data-spectra-capture-root", captureScopeId);
 
   const originalElements = collectElementTree(target);
   const clonedElements = collectElementTree(clonedRoot);
@@ -528,7 +645,13 @@ function buildStandaloneSnapshotHtml(target: Element): string {
   sanitizeClonedTree(clonedRoot);
   rewriteAssetUrls(clonedRoot, document.baseURI);
 
-  return clonedRoot.outerHTML;
+  const matchedScopedCssText = collectMatchedScopedCssText(target, captureScopeSelector);
+  const scopedCssText = markScopedCss(matchedScopedCssText);
+  const html = clonedRoot.outerHTML;
+  return {
+    html,
+    cssText: scopedCssText
+  };
 }
 
 function collectElementTree(root: Element): Element[] {
@@ -539,6 +662,9 @@ function collectElementTree(root: Element): Element[] {
 
 function inlineComputedStyles(originalElement: Element, clonedElement: Element): void {
   if (!(clonedElement instanceof HTMLElement) && !(clonedElement instanceof SVGElement)) {
+    return;
+  }
+  if (INLINE_STYLE_TAG_BLOCKLIST.has(originalElement.tagName.toLowerCase())) {
     return;
   }
 
@@ -568,34 +694,26 @@ function shouldKeepCssProperty(propertyName: string): boolean {
 }
 
 function shouldDropStyleValue(propertyName: string, rawValue: string): boolean {
-  const value = rawValue.trim().toLowerCase();
+  const value = normalizeStyleValue(rawValue);
   if (!value) {
     return true;
   }
   if (value === "initial" || value === "inherit" || value === "unset" || value === "revert") {
     return true;
   }
+  if (PROTECTED_DEFAULT_STYLE_PROPERTIES.has(propertyName)) {
+    return false;
+  }
 
-  const defaults = DEFAULT_STYLE_VALUE_FILTERS.get(propertyName);
+  const defaults = NORMALIZED_DEFAULT_STYLE_VALUE_FILTERS.get(propertyName);
   if (!defaults) {
     return false;
   }
   return defaults.has(value);
 }
 
-function collectDocumentCssText(): string {
-  let cssText = "";
-  for (const styleSheet of Array.from(document.styleSheets)) {
-    try {
-      const rules = styleSheet.cssRules;
-      for (const rule of Array.from(rules)) {
-        cssText += `${rule.cssText}\n`;
-      }
-    } catch {
-      // Ignore cross-origin stylesheets blocked by the browser.
-    }
-  }
-  return cssText;
+function normalizeStyleValue(rawValue: string): string {
+  return rawValue.trim().toLowerCase().replace(/\s+/g, " ").replace(/\s*([,])\s*/g, "$1");
 }
 
 function computeLocalHostSignature(element: Element): SaveComponentPayload["sourceHostSignature"] {

@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { rewriteAssetUrls, sanitizeClonedTree, toAbsoluteUrl } from "./capture-snapshot";
+import {
+  collectMatchedScopedCssText,
+  createCaptureScopeSelector,
+  markScopedCss,
+  rewriteAssetUrls,
+  sanitizeClonedTree,
+  toAbsoluteUrl,
+  unwrapScopedCss
+} from "./capture-snapshot";
 
 describe("capture snapshot seam helpers", () => {
-  it("sanitizes scripts, event handlers, classes, and data attributes", () => {
+  it("sanitizes scripts and event handlers but preserves selector attributes", () => {
     const wrapper = document.createElement("div");
     wrapper.innerHTML = `
       <article class="card" data-id="123" onclick="alert(1)">
@@ -16,12 +24,45 @@ describe("capture snapshot seam helpers", () => {
     const article = wrapper.querySelector("article");
     const image = wrapper.querySelector("#hero");
     expect(wrapper.querySelector("script")).toBeNull();
-    expect(article?.hasAttribute("class")).toBe(false);
-    expect(article?.hasAttribute("data-id")).toBe(false);
+    expect(article?.hasAttribute("class")).toBe(true);
+    expect(article?.hasAttribute("data-id")).toBe(true);
     expect(article?.hasAttribute("onclick")).toBe(false);
-    expect(image?.hasAttribute("class")).toBe(false);
-    expect(image?.hasAttribute("data-track")).toBe(false);
+    expect(image?.hasAttribute("class")).toBe(true);
+    expect(image?.hasAttribute("data-track")).toBe(true);
     expect(image?.hasAttribute("style")).toBe(false);
+  });
+
+  it("collects only matched rules and scopes them to the capture root", () => {
+    const style = document.createElement("style");
+    style.textContent = `
+      .match { color: red; animation-name: pulse; }
+      .no-match { color: blue; }
+      @keyframes pulse { from { opacity: 0; } to { opacity: 1; } }
+    `;
+    document.head.appendChild(style);
+
+    const target = document.createElement("section");
+    target.innerHTML = `<button class="match">Save</button>`;
+    document.body.appendChild(target);
+
+    const scopeSelector = createCaptureScopeSelector("capture_test");
+    const cssText = collectMatchedScopedCssText(target, scopeSelector);
+
+    expect(cssText).toContain(`${scopeSelector} .match`);
+    expect(cssText).toContain("@keyframes pulse");
+    expect(cssText).not.toContain(".no-match");
+
+    target.remove();
+    style.remove();
+  });
+
+  it("marks and unwraps pre-scoped capture css", () => {
+    const marked = markScopedCss(".x { color: red; }");
+    const unwrapped = unwrapScopedCss(marked);
+
+    expect(unwrapped.isScoped).toBe(true);
+    expect(unwrapped.cssText).toContain(".x { color: red; }");
+    expect(unwrapScopedCss(".legacy { color: blue; }").isScoped).toBe(false);
   });
 
   it("rewrites src, href, poster, and srcset attributes to absolute URLs", () => {

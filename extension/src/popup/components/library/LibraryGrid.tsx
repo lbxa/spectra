@@ -16,7 +16,12 @@ type LibraryGridProps = {
   onStartPreview: (component: SavedComponent, activeCollectionId: string | null) => void;
   onOpenDetails: (componentId: string) => void;
   onCloseDetails: () => void;
-  onMoveComponentToCollection: (componentId: string, targetCollectionId: string) => void;
+  onCopyComponentToCollection: (componentId: string, targetCollectionId: string) => void;
+  onMoveComponentToCollection: (
+    componentId: string,
+    sourceCollectionId: string,
+    targetCollectionId: string
+  ) => void;
   onDeleteComponent: (componentId: string) => void;
   onDeleteCollection: (collectionId: string) => void;
 };
@@ -31,6 +36,7 @@ export function LibraryGrid({
   onStartPreview,
   onOpenDetails,
   onCloseDetails,
+  onCopyComponentToCollection,
   onMoveComponentToCollection,
   onDeleteComponent,
   onDeleteCollection
@@ -111,8 +117,11 @@ export function LibraryGrid({
                 onDeleteConfirmOpenChange={(open) => {
                   setPendingDeleteComponentId(open ? component.id : null);
                 }}
+                onStartPreview={onStartPreview}
                 onOpenDetails={onOpenDetails}
+                onCopyComponentToCollection={onCopyComponentToCollection}
                 onMoveComponentToCollection={onMoveComponentToCollection}
+                activeCollectionId={activeCollectionId}
                 onDeleteComponent={onDeleteComponent}
               />
             ))}

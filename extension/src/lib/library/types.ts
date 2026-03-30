@@ -63,7 +63,12 @@ export interface LibraryRepository {
   listComponents(collectionId?: string): Promise<SavedComponent[]>;
   getComponent(id: string): Promise<SavedComponent | null>;
   saveComponent(input: SavedComponent): Promise<SavedComponent>;
-  moveComponent(id: string, targetCollectionId: string): Promise<SavedComponent>;
+  copyComponentToCollection(id: string, targetCollectionId: string): Promise<SavedComponent>;
+  moveComponentToCollection(
+    id: string,
+    sourceCollectionId: string,
+    targetCollectionId: string
+  ): Promise<SavedComponent>;
   deleteComponent(id: string): Promise<void>;
 }
 
