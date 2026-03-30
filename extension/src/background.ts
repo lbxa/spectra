@@ -1,10 +1,11 @@
 import {
   isIncomingRuntimeMessage,
   isPreviewStatusMessage,
-  type LibraryUpdatedMessage,
   type SaveComponentPayload,
   type SaveComponentResponse
 } from "./lib/library/messages";
+import { ChromeRuntimeEventPublisher } from "./lib/events/chrome-runtime-event-publisher";
+import { LibraryApplicationService } from "./lib/library/application-service";
 import { libraryRepository } from "./lib/library/repository";
 import { INBOX_COLLECTION_ID, type SavedComponent } from "./lib/library/types";
 import { injectCaptureRuntime } from "./background/injector";
@@ -24,6 +25,11 @@ type Bounds = {
   width: number;
   height: number;
 };
+
+const libraryApplicationService = new LibraryApplicationService(
+  libraryRepository,
+  new ChromeRuntimeEventPublisher()
+);
 
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab || typeof tab.id !== "number") {
@@ -155,18 +161,10 @@ async function handleSaveComponent(
     thumbnailMeta: thumbnailMeta ?? undefined,
     sourceHostSignature: payload.sourceHostSignature
   };
-  const savedComponent = await libraryRepository.saveComponent(record);
+  const savedComponent = await libraryApplicationService.saveComponent(record);
   if (typeof tabId === "number") {
     await clearCaptureTargetCollectionId(tabId);
   }
-  await notifyLibraryUpdated({
-    type: "LIBRARY_UPDATED",
-    payload: {
-      event: "COMPONENT_SAVED",
-      component: savedComponent,
-      collectionId: savedComponent.collectionIds[0]
-    }
-  });
   return generateCapturePreview(croppedDataUrl);
 }
 
@@ -273,10 +271,3 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-async function notifyLibraryUpdated(message: LibraryUpdatedMessage): Promise<void> {
-  try {
-    await chrome.runtime.sendMessage(message);
-  } catch {
-    // Ignore when no extension views are listening.
-  }
-}
