@@ -17,7 +17,10 @@
     "check": "bun run build && bun run typecheck",
     "test": "bunx vitest run",
     "test:watch": "bunx vitest",
-    "dev": "bun run dev:popup:hmr"
+    "dev": "bun run dev:popup:hmr",
+    "release:prepare": "bun scripts/release/prepare-release.ts",
+    "release": "bunx semantic-release",
+    "release:dry-run": "bunx semantic-release --dry-run"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.2.16",
@@ -38,6 +41,11 @@
   },
   "devDependencies": {
     "@rolldown/plugin-babel": "latest",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/github": "^12.0.6",
+    "@semantic-release/npm": "^13.1.5",
+    "@semantic-release/release-notes-generator": "^14.1.0",
     "@tailwindcss/vite": "latest",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -50,6 +58,7 @@
     "chrome-types": "latest",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.0.1",
+    "semantic-release": "^25.0.3",
     "shadcn": "^4.1.0",
     "tailwindcss": "latest",
     "typescript": "latest",

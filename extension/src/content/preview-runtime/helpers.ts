@@ -1,7 +1,9 @@
 import type { InsertionRelation } from "../../lib/library/messages";
 import type { AnchorSpec, SavedPreview, SavedPreviewTarget } from "../../lib/library/types";
+import { normalizePathname } from "../../lib/preview/pathname";
 import type { CandidateContainer } from "../candidate-scan";
 import type { OverlayRoot } from "../overlay-root";
+import { applyRectLayerBounds } from "../targeting/rect-layer";
 import { updateGhostPlacement } from "../ghost-placement";
 
 export function updateCandidatePresentation(
@@ -19,15 +21,16 @@ export function updateCandidatePresentation(
 }
 
 export function showRect(layer: HTMLElement, rect: DOMRect): void {
-  layer.style.display = "block";
-  layer.style.left = `${Math.max(0, rect.left)}px`;
-  layer.style.top = `${Math.max(0, rect.top)}px`;
-  layer.style.width = `${Math.max(1, rect.width)}px`;
-  layer.style.height = `${Math.max(1, rect.height)}px`;
+  applyRectLayerBounds(layer, rect, { minWidth: 1, minHeight: 1 });
 }
 
-export function pickCandidateAt(x: number, y: number, candidates: CandidateContainer[]): CandidateContainer | null {
-  const topElement = document.elementFromPoint(x, y);
+export function pickCandidateAt(
+  x: number,
+  y: number,
+  candidates: CandidateContainer[],
+  preferredTarget?: Element | null
+): CandidateContainer | null {
+  const topElement = preferredTarget ?? document.elementFromPoint(x, y);
   if (!(topElement instanceof Element)) {
     return null;
   }
@@ -36,7 +39,7 @@ export function pickCandidateAt(x: number, y: number, candidates: CandidateConta
       return candidate;
     }
   }
-  return candidates[0] ?? null;
+  return null;
 }
 
 export function buildPreviewTarget(): SavedPreviewTarget {
@@ -47,16 +50,6 @@ export function buildPreviewTarget(): SavedPreviewTarget {
     matchMode: "exact_path",
     canonicalUrl: window.location.href
   };
-}
-
-export function normalizePathname(pathname: string): string {
-  if (!pathname || pathname === "/") {
-    return "/";
-  }
-  const normalized = pathname.startsWith("/") ? pathname : `/${pathname}`;
-  return normalized.endsWith("/") && normalized.length > 1
-    ? normalized.slice(0, normalized.length - 1)
-    : normalized;
 }
 
 export function buildAnchorSpec(host: HTMLElement): AnchorSpec {

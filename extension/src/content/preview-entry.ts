@@ -11,11 +11,9 @@ type RuntimeWindow = Window & {
   if (runtimeWindow.__spectraPreviewRuntimeV1__) {
     return;
   }
-  const runtime = createPreviewRuntime();
-  runtimeWindow.__spectraPreviewRuntimeV1__ = {
-    teardown: () => {
-      runtime.teardown();
+  runtimeWindow.__spectraPreviewRuntimeV1__ = createPreviewRuntime({
+    onTeardown: () => {
       delete runtimeWindow.__spectraPreviewRuntimeV1__;
     }
-  };
+  });
 })();

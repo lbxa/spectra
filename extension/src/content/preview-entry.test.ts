@@ -16,7 +16,8 @@ const testState = vi.hoisted(() => ({
     onClearAll: () => void;
     onExit: () => void;
   } | null,
-  toasts: [] as string[]
+  toasts: [] as string[],
+  overlayFlashCalls: 0
 }));
 
 vi.mock("./candidate-scan", () => ({
@@ -31,20 +32,27 @@ vi.mock("./overlay-root", () => ({
   mountOverlayRoot: vi.fn(() => {
     const root = document.createElement("div");
     const hoverOutline = document.createElement("div");
+    const parentOutline = document.createElement("div");
+    parentOutline.setAttribute("data-mock-parent-outline", "true");
     const selectedOutline = document.createElement("div");
     const ghost = document.createElement("div");
     const label = document.createElement("div");
     const controlsHost = document.createElement("div");
+    root.append(hoverOutline, parentOutline, selectedOutline, ghost, label, controlsHost);
     document.body.appendChild(root);
     return {
       root,
       hoverOutline,
+      parentOutline,
       selectedOutline,
       ghost,
       label,
       controlsHost,
       showToast: vi.fn((message: string) => {
         testState.toasts.push(message);
+      }),
+      showFlash: vi.fn(() => {
+        testState.overlayFlashCalls += 1;
       }),
       destroy: () => root.remove()
     };
@@ -175,6 +183,7 @@ describe("preview-entry multi preview behavior", () => {
     testState.watchCallbacks.clear();
     testState.sessionToolbarHandlers = null;
     testState.toasts = [];
+    testState.overlayFlashCalls = 0;
     listeners = [];
     document.body.innerHTML = "";
     Reflect.set(globalThis, "chrome", {
@@ -263,6 +272,62 @@ describe("preview-entry multi preview behavior", () => {
     expect(document.querySelectorAll("[data-spectra-preview-id]")).toHaveLength(1);
   });
 
+  it("shows shared shortcuts HUD in targeting with Shift active state", async () => {
+    const host = createCandidateHost("host-shortcuts");
+    await loadRuntime();
+
+    testState.candidate = {
+      element: host,
+      rect: host.getBoundingClientRect(),
+      signature: createComponent("cmp-shortcuts").sourceHostSignature
+    };
+    await beginTargeting(createComponent("cmp-shortcuts"));
+
+    const panel = document.querySelector("[data-component-picker-shortcuts='true']");
+    if (!(panel instanceof HTMLElement)) {
+      throw new Error("Expected shortcuts panel");
+    }
+    expect(panel.textContent).toContain("Exit preview");
+
+    const shiftKey = Array.from(panel.querySelectorAll("span")).find((node) => node.textContent === "Shift");
+    if (!(shiftKey instanceof HTMLElement)) {
+      throw new Error("Expected Shift shortcut key");
+    }
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", bubbles: true }));
+    expect(shiftKey.style.borderColor).toContain("217, 70, 239");
+
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
+    expect(shiftKey.style.borderColor).toContain("148, 163, 184");
+  });
+
+  it("shows magenta parent outline while Shift targeting is active", async () => {
+    const host = createCandidateHost("host-parent-outline");
+    const child = document.createElement("div");
+    host.appendChild(child);
+    await loadRuntime();
+
+    testState.candidate = {
+      element: host,
+      rect: host.getBoundingClientRect(),
+      signature: createComponent("cmp-parent-outline").sourceHostSignature
+    };
+    await beginTargeting(createComponent("cmp-parent-outline"));
+
+    child.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+    const parentOutline = document.querySelector("[data-mock-parent-outline='true']");
+    if (!(parentOutline instanceof HTMLElement)) {
+      throw new Error("Expected parent outline");
+    }
+    expect(parentOutline.style.display).toBe("none");
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", bubbles: true }));
+    expect(parentOutline.style.display).toBe("block");
+
+    document.dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
+    expect(parentOutline.style.display).toBe("none");
+  });
+
   it("removes only the latest active preview when Delete is pressed", async () => {
     const firstHost = createCandidateHost("host-1");
     const secondHost = createCandidateHost("host-2");
@@ -294,6 +359,28 @@ describe("preview-entry multi preview behavior", () => {
 
     expect(document.querySelector('[data-spectra-preview-id="preview_1"]')).not.toBeNull();
     expect(document.querySelector('[data-spectra-preview-id="preview_2"]')).toBeNull();
+  });
+
+  it("clears preview runtime singleton when exiting preview mode", async () => {
+    const host = createCandidateHost("host-1");
+    await loadRuntime();
+
+    testState.candidate = {
+      element: host,
+      rect: host.getBoundingClientRect(),
+      signature: createComponent("cmp-1").sourceHostSignature
+    };
+    await beginTargeting(createComponent("cmp-1"));
+    host.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushWork();
+
+    testState.sessionToolbarHandlers?.onExit();
+    await flushWork();
+
+    const runtimeWindow = window as Window & {
+      __spectraPreviewRuntimeV1__?: { teardown: () => void };
+    };
+    expect(runtimeWindow.__spectraPreviewRuntimeV1__).toBeUndefined();
   });
 
   it("keeps other previews when one is removed by page mutation callback", async () => {
@@ -368,6 +455,19 @@ describe("preview-entry multi preview behavior", () => {
   it("saves current scene through global session toolbar action", async () => {
     const firstHost = createCandidateHost("host-1");
     await loadRuntime();
+    vi.mocked(chrome.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+      if (isSavePreviewSceneMessage(message)) {
+        return { ok: true };
+      }
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        Reflect.get(message, "type") === "LIST_SAVED_PREVIEWS_FOR_PAGE"
+      ) {
+        return { ok: true, previews: [] };
+      }
+      return undefined;
+    });
 
     testState.candidate = {
       element: firstHost,
@@ -400,6 +500,7 @@ describe("preview-entry multi preview behavior", () => {
     expect(firstInstanceLayout?.height).toBeCloseTo(60 / referenceHeight, 5);
     expect(firstInstanceLayout?.x).toBeCloseTo(30 / referenceWidth, 5);
     expect(firstInstanceLayout?.y).toBeCloseTo(40 / referenceHeight, 5);
+    expect(testState.overlayFlashCalls).toBe(1);
   });
 
   it("applies saved preview from idle runtime and replays all instances", async () => {

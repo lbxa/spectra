@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 
 type ShortcutsCardProps = {
   shiftActive: boolean;
+  escapeDescription?: string;
 };
 
 function ShortcutRow({
@@ -21,14 +22,14 @@ function ShortcutRow({
   );
 }
 
-export function ShortcutsCard({ shiftActive }: ShortcutsCardProps) {
+export function ShortcutsCard({ shiftActive, escapeDescription = "Exit capture" }: ShortcutsCardProps) {
   return (
     <div data-component-picker-shortcuts="true" style={panelStyle}>
       <div style={{ fontSize: "11px", fontWeight: "600", letterSpacing: "0.02em", opacity: "0.9" }}>
         Keyboard shortcuts
       </div>
       <div style={shortcutsGridStyle}>
-        <ShortcutRow keyLabel="Esc" description="Exit capture" />
+        <ShortcutRow keyLabel="Esc" description={escapeDescription} />
         <ShortcutRow keyLabel="Shift" description="Select parent" isActive={shiftActive} />
       </div>
     </div>

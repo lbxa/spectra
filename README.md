@@ -65,6 +65,55 @@ bun run typecheck
 bun run build
 ```
 
+## Release and Alpha Packaging Protocol
+
+Spectra release automation uses semantic-release with Conventional Commits and two channels:
+
+- `main` -> stable releases (`x.y.z`).
+- `alpha` -> prereleases (`x.y.z-alpha.N`).
+
+### Semver Rules (Common Sense)
+
+- `major`: commit includes `BREAKING CHANGE` or `!` in the Conventional Commit header.
+- `minor`: `feat`.
+- `patch`: `fix`, `perf`, `refactor`, `revert`.
+- no release by default: `docs`, `test`, `style`, `chore`, `ci`, `build`.
+
+### Chrome Extension Version Rules
+
+Chrome manifest versions cannot contain prerelease tags directly. To keep semver intent and Chrome compatibility:
+
+- Semantic prerelease: `1.4.0-alpha.3`
+- Manifest `version`: `1.4.0.3`
+- Manifest `version_name`: `1.4.0-alpha.3`
+
+Stable releases use the same value for both `version` and `version_name` (for example `1.4.0`).
+
+### CI/CD Outputs for Alpha Testing
+
+Each release publish should produce both:
+
+- A GitHub Packages npm artifact (versioned by semantic-release).
+- A downloadable extension ZIP assembled from `dist/` contents (zip root includes `manifest.json`).
+
+### Operational Guardrails
+
+- Release workflow runs on push to `alpha` and `main`.
+- Use full git history in CI for semantic-release commit analysis (`fetch-depth: 0`).
+- Keep auth in CI secrets and workflow tokens only (`GITHUB_TOKEN`/`NODE_AUTH_TOKEN`); never commit credentials.
+- Validate with repo gates before publish: `bun run typecheck`, `bun run build`, `bun run test`.
+
+### Local Release Checks
+
+- Dry run semantic-release without publishing: `bun run release:dry-run`
+- Run required verification gates before any release push:
+
+```bash
+bun run typecheck
+bun run build
+bun run test
+```
+
 ## Snapshot Capture Architecture (Fidelity-First)
 
 The capture pipeline uses a single persisted artifact:

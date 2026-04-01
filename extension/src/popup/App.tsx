@@ -3,6 +3,7 @@ import { ChromeRuntimeEventPublisher } from "@/lib/events/chrome-runtime-event-p
 import { LibraryApplicationService } from "@/lib/library/application-service";
 import { libraryRepository } from "@/lib/library/repository";
 import type { Collection, SavedComponent, SavedPreview, SavedPreviewListItem } from "@/lib/library/types";
+import { normalizePathname } from "@/lib/preview/pathname";
 import { applySavedPreviewOnActiveTab, listSavedPreviewsForPage } from "./lib/messages";
 import { useCapturePreviewActions } from "./hooks/use-capture-preview-actions";
 import { useLibraryState } from "./hooks/use-library-state";
@@ -658,12 +659,3 @@ function toPreviewPageKey(target: { origin: string; pathname: string }): string 
   return `${target.origin}${target.pathname}`;
 }
 
-function normalizePathname(pathname: string): string {
-  if (!pathname || pathname === "/") {
-    return "/";
-  }
-  const normalized = pathname.startsWith("/") ? pathname : `/${pathname}`;
-  return normalized.endsWith("/") && normalized.length > 1
-    ? normalized.slice(0, normalized.length - 1)
-    : normalized;
-}

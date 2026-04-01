@@ -31,14 +31,19 @@ export type PickerUiApi = {
   destroy: () => void;
 };
 
-export function createPickerUi(): PickerUiApi {
+type PickerUiOptions = {
+  shortcutsEnabled?: boolean;
+};
+
+export function createPickerUi(options: PickerUiOptions = {}): PickerUiApi {
+  const shortcutsEnabled = options.shortcutsEnabled ?? true;
   const container = document.createElement("div");
   container.setAttribute("data-component-picker-ui-root", "true");
   document.documentElement.appendChild(container);
   const root = createRoot(container);
 
   const state: PickerUiState = {
-    shortcutsVisible: true,
+    shortcutsVisible: shortcutsEnabled,
     shiftActive: false,
     toastMessage: null,
     toastVisible: false,
@@ -88,7 +93,7 @@ export function createPickerUi(): PickerUiApi {
     flushSync(() => {
       root.render(
         <>
-          {state.shortcutsVisible ? <ShortcutsCard shiftActive={state.shiftActive} /> : null}
+          {shortcutsEnabled && state.shortcutsVisible ? <ShortcutsCard shiftActive={state.shiftActive} /> : null}
           <ToastLayer message={state.toastMessage} visible={state.toastVisible} />
           <FeedbackLayer
             flashMounted={state.flashMounted}

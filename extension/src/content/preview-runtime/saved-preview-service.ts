@@ -29,6 +29,8 @@ type SavedPreviewServiceDeps = {
   ) => void;
   setSavedPreviews: (previews: SavedPreviewListItem[]) => void;
   showToast: (message: string) => void;
+  playOptimisticSaveJingle: () => void;
+  showSuccessFlash: () => void;
 };
 
 export function createSavedPreviewService(deps: SavedPreviewServiceDeps) {
@@ -87,18 +89,20 @@ export function createSavedPreviewService(deps: SavedPreviewServiceDeps) {
       schemaVersion: 1
     };
 
-    const response = await deps.runWithBusyState(() =>
-      deps.requestRuntime<SavePreviewSceneResponse>({
+    const response = await deps.runWithBusyState(() => {
+      deps.playOptimisticSaveJingle();
+      return deps.requestRuntime<SavePreviewSceneResponse>({
         type: "SAVE_PREVIEW_SCENE",
         payload: scene
-      } satisfies SavePreviewSceneMessage)
-    );
+      } satisfies SavePreviewSceneMessage);
+    });
 
     if (!response || !response.ok) {
       deps.showToast(response?.error || "Could not save preview");
       return;
     }
 
+    deps.showSuccessFlash();
     deps.showToast("Preview saved");
     await loadSavedPreviewsForCurrentPage();
   };

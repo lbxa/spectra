@@ -4,6 +4,11 @@ import { rankCandidates } from "../candidate-rank";
 import { scanCandidateContainers, type CandidateContainer } from "../candidate-scan";
 import { mountOverlayRoot, type OverlayRoot } from "../overlay-root";
 import { insertPreview } from "../preview-insert";
+import { playExtensionSound } from "../extension-audio";
+import {
+  createShortcutsHud,
+  type ShortcutsHudApi
+} from "../picker-ui/ShortcutsHud";
 import {
   createInsertedPreviewRegistry,
   type InsertedPreviewRegistry
@@ -13,6 +18,12 @@ import {
   showRect,
   updateCandidatePresentation
 } from "./helpers";
+import {
+  installCaptureInteractionGuards,
+  resolveSelectedTarget
+} from "../capture/selection-runtime";
+import { createInteractionController } from "../targeting/interaction-controller";
+import { hideParentOutline, syncParentOutlineForTarget } from "../targeting/parent-outline";
 import { sendRuntimeRequest, sendStatus } from "./runtime-messaging";
 import { createSavedPreviewService } from "./saved-preview-service";
 import {
@@ -30,10 +41,89 @@ export type PreviewRuntime = {
   teardown: () => void;
 };
 
-export function createPreviewRuntime(): PreviewRuntime {
+type PreviewRuntimeOptions = {
+  onTeardown?: () => void;
+};
+
+export function createPreviewRuntime(options: PreviewRuntimeOptions = {}): PreviewRuntime {
   let state: PreviewRuntimeState = initialPreviewRuntimeState;
   let overlay: OverlayRoot | null = null;
   let sessionToolbar: PreviewSessionToolbarControls | null = null;
+  let shortcutsHud: ShortcutsHudApi | null = null;
+  let lastHoveredTarget: Element | null = null;
+  const updateParentOutlineForTarget = (target: Element | null, isShiftHeld: boolean): void => {
+    if (!overlay) {
+      return;
+    }
+    syncParentOutlineForTarget(overlay.parentOutline, target, isShiftHeld);
+  };
+  const updateActiveCandidateFromTarget = (target: Element | null, isShiftHeld: boolean): void => {
+    if (!overlay || state.mode !== "targeting" || !target) {
+      return;
+    }
+    const resolvedTarget = resolveSelectedTarget(target, isShiftHeld);
+    const candidate = pickCandidateAt(0, 0, state.candidates, resolvedTarget);
+    dispatch({ type: "SET_ACTIVE_CANDIDATE", candidate });
+    if (candidate) {
+      updateCandidatePresentation(candidate, overlay, state.relation);
+    }
+  };
+  const interactionController = createInteractionController({
+    isActive: () => state.mode === "targeting",
+    installGuards: installCaptureInteractionGuards,
+    onHover: (event, _target, context) => {
+      if (!overlay || state.mode !== "targeting") {
+        return;
+      }
+      lastHoveredTarget = _target;
+      updateParentOutlineForTarget(_target, context.isShiftHeld);
+      const resolvedTarget = resolveSelectedTarget(_target, context.isShiftHeld);
+      const candidate = pickCandidateAt(event.clientX, event.clientY, state.candidates, resolvedTarget);
+      dispatch({ type: "SET_ACTIVE_CANDIDATE", candidate });
+      if (candidate) {
+        updateCandidatePresentation(candidate, overlay, state.relation);
+      }
+    },
+    onCommit: (event) => {
+      if (state.mode !== "targeting" || !overlay || !state.component) {
+        return;
+      }
+      const candidate = state.activeCandidate;
+      if (!candidate) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      commitInsert(candidate, state.component).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "Unable to insert preview";
+        overlay?.showToast(message);
+        void sendStatus({ type: "PREVIEW_ERROR", code: "insert_failed", message });
+        resetToIdle();
+      });
+    },
+    onCancel: () => {
+      if (state.mode === "targeting") {
+        resetToIdle();
+      }
+    },
+    onModifierChange: ({ isShiftHeld }) => {
+      shortcutsHud?.setShiftActive(isShiftHeld);
+      const target = lastHoveredTarget ?? state.activeCandidate?.element ?? null;
+      updateParentOutlineForTarget(target, isShiftHeld);
+      updateActiveCandidateFromTarget(target, isShiftHeld);
+    }
+  });
+
+  const onGlobalDelete = (event: KeyboardEvent): void => {
+    if (event.key !== "Delete" || registry.size() <= 0) {
+      return;
+    }
+    const previewId = state.activePreviewId ?? registry.getLastInsertedPreviewId();
+    if (previewId) {
+      registry.remove(previewId);
+    }
+  };
 
   const dispatch = (action: PreviewRuntimeAction): void => {
     state = reducePreviewRuntimeState(state, action);
@@ -48,7 +138,12 @@ export function createPreviewRuntime(): PreviewRuntime {
     });
     if (overlay) {
       overlay.selectedOutline.style.display = "none";
+      hideParentOutline(overlay.parentOutline);
     }
+    if (state.mode !== "targeting") {
+      lastHoveredTarget = null;
+    }
+    syncShortcutHud();
     updateSessionToolbarVisibility();
   };
 
@@ -100,6 +195,12 @@ export function createPreviewRuntime(): PreviewRuntime {
     },
     showToast: (message) => {
       ensureOverlay().showToast(message);
+    },
+    playOptimisticSaveJingle: () => {
+      void playExtensionSound("jingle.wav");
+    },
+    showSuccessFlash: () => {
+      ensureOverlay().showFlash();
     }
   });
 
@@ -116,55 +217,14 @@ export function createPreviewRuntime(): PreviewRuntime {
     }
   };
 
-  const onPointerMove = (event: MouseEvent): void => {
-    if (state.mode !== "targeting" || !overlay) {
-      return;
-    }
-    const candidate = pickCandidateAt(event.clientX, event.clientY, state.candidates);
-    if (!candidate) {
-      return;
-    }
-    dispatch({ type: "SET_ACTIVE_CANDIDATE", candidate });
-    updateCandidatePresentation(candidate, overlay, state.relation);
-  };
-
-  const onClick = (event: MouseEvent): void => {
-    if (state.mode !== "targeting" || !overlay || !state.component) {
-      return;
-    }
-    const candidate = state.activeCandidate;
-    if (!candidate) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
-    commitInsert(candidate, state.component).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : "Unable to insert preview";
-      overlay?.showToast(message);
-      void sendStatus({ type: "PREVIEW_ERROR", code: "insert_failed", message });
-      resetToIdle();
-    });
-  };
-
-  const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === "Escape" && state.mode === "targeting") {
-      resetToIdle();
-      return;
-    }
-    if (event.key === "Delete" && registry.size() > 0) {
-      const previewId = state.activePreviewId ?? registry.getLastInsertedPreviewId();
-      if (previewId) {
-        registry.remove(previewId);
-      }
-    }
-  };
-
   function ensureOverlay(): OverlayRoot {
     if (overlay) {
       return overlay;
     }
     overlay = mountOverlayRoot();
+    if (!shortcutsHud) {
+      shortcutsHud = createShortcutsHud({ escapeDescription: "Exit preview" });
+    }
     if (!sessionToolbar) {
       sessionToolbar = createPreviewSessionToolbar({
         onSave: () => {
@@ -185,15 +245,15 @@ export function createPreviewRuntime(): PreviewRuntime {
       });
       sessionToolbar.mount(overlay.controlsHost);
     }
-    document.addEventListener("mousemove", onPointerMove, true);
-    document.addEventListener("click", onClick, true);
-    document.addEventListener("keydown", onKeyDown, true);
+    interactionController.start();
+    document.addEventListener("keydown", onGlobalDelete, true);
     return overlay;
   }
 
   async function beginTargeting(message: BeginTargetingMessage): Promise<void> {
     const runtimeOverlay = ensureOverlay();
     dispatch({ type: "BEGIN_TARGETING", component: message.component });
+    syncShortcutHud();
 
     const candidates = scanCandidateContainers();
     if (candidates.length === 0) {
@@ -218,6 +278,7 @@ export function createPreviewRuntime(): PreviewRuntime {
       resetToIdle();
       return;
     }
+    lastHoveredTarget = activeCandidate.element;
     updateCandidatePresentation(activeCandidate, runtimeOverlay, state.relation);
     await sendStatus({ type: "PREVIEW_READY" });
   }
@@ -228,6 +289,7 @@ export function createPreviewRuntime(): PreviewRuntime {
     registry.register(inserted, candidate.element, component, state.relation, state.alignment);
     syncInsertedState();
     runtimeOverlay.hoverOutline.style.display = "none";
+    hideParentOutline(runtimeOverlay.parentOutline);
     runtimeOverlay.ghost.style.display = "none";
 
     const wrapperRect = inserted.wrapper.getBoundingClientRect();
@@ -245,23 +307,39 @@ export function createPreviewRuntime(): PreviewRuntime {
     dispatch({ type: "RESET_TO_IDLE" });
     if (overlay) {
       overlay.hoverOutline.style.display = "none";
+      hideParentOutline(overlay.parentOutline);
       overlay.selectedOutline.style.display = "none";
       overlay.ghost.style.display = "none";
       overlay.label.style.display = "none";
     }
+    lastHoveredTarget = null;
+    syncShortcutHud();
     updateSessionToolbarVisibility();
+  }
+
+  function syncShortcutHud(): void {
+    if (!shortcutsHud) {
+      return;
+    }
+    const isTargeting = state.mode === "targeting";
+    shortcutsHud.setVisible(isTargeting);
+    if (!isTargeting) {
+      shortcutsHud.setShiftActive(false);
+    }
   }
 
   function teardown(): void {
     registry.teardown();
     sessionToolbar?.unmount();
     sessionToolbar = null;
+    interactionController.stop();
+    document.removeEventListener("keydown", onGlobalDelete, true);
     overlay?.destroy();
     overlay = null;
-    document.removeEventListener("mousemove", onPointerMove, true);
-    document.removeEventListener("click", onClick, true);
-    document.removeEventListener("keydown", onKeyDown, true);
+    shortcutsHud?.destroy();
+    shortcutsHud = null;
     chrome.runtime.onMessage.removeListener(onRuntimeMessage);
+    options.onTeardown?.();
   }
 
   function clearAllInsertedPreviews(notify: boolean = true): void {

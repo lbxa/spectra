@@ -20,6 +20,7 @@ import {
   normalizeComponentInput,
   normalizeStoredComponent
 } from "./repository/normalizers";
+import { normalizePathname } from "../preview/pathname";
 
 const DATABASE_NAME = "spectra-library-v2";
 const DATABASE_VERSION = 2;
@@ -721,13 +722,3 @@ class IndexedDbLibraryRepository implements LibraryRepository {
 }
 
 export const libraryRepository: LibraryRepository = IndexedDbLibraryRepository.getInstance();
-
-function normalizePathname(pathname: string): string {
-  if (!pathname || pathname === "/") {
-    return "/";
-  }
-  const normalized = pathname.startsWith("/") ? pathname : `/${pathname}`;
-  return normalized.endsWith("/") && normalized.length > 1
-    ? normalized.slice(0, normalized.length - 1)
-    : normalized;
-}
