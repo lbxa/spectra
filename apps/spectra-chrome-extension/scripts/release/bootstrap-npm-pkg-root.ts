@@ -1,8 +1,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-const repoRoot = resolve(".");
-const releaseRoot = join(repoRoot, ".release");
+const appRoot = resolve(".");
+const releaseRoot = join(appRoot, ".release");
 const npmRoot = join(releaseRoot, "npm");
 
 mkdirSync(npmRoot, { recursive: true });

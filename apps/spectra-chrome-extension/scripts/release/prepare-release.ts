@@ -52,11 +52,11 @@ if (prerelease) {
   manifestVersion = `${major}.${minor}.${patch}.${prereleaseNumber}`;
 }
 
-const repoRoot = resolve(".");
-const releaseRoot = join(repoRoot, ".release");
+const appRoot = resolve(".");
+const releaseRoot = join(appRoot, ".release");
 const artifactsDir = join(releaseRoot, "artifacts");
 const npmRoot = join(releaseRoot, "npm");
-const distDir = join(repoRoot, "dist");
+const distDir = join(appRoot, "dist");
 const distManifestPath = join(distDir, "manifest.json");
 
 rmSync(releaseRoot, { recursive: true, force: true });
