@@ -7,15 +7,28 @@ import type {
   ListSavedPreviewsForPageMessage,
   ListSavedPreviewsForPageResponse,
   PreviewStatusMessage,
+  RequestAdaptationPatchMessage,
+  RequestAdaptationPatchResponse,
+  SaveAdaptedComponentRevisionMessage,
+  SaveAdaptedComponentRevisionResponse,
   SavePreviewSceneMessage,
   SavePreviewSceneResponse,
   SaveComponentResponse,
   StartPreviewMessage
 } from "../lib/library/messages";
 import { libraryRepository } from "../lib/library/repository";
+import { requestAdaptationPatch } from "./adaptation/client";
 import { injectPreviewRuntime } from "./injector";
 import { assertPreviewEligibleTab, requireActiveTab } from "./tab-gate";
 import { setPreviewSession, updatePreviewSession } from "./session-store";
+import { createAdaptedComponentSnapshot } from "../lib/library/revisions";
+import { LibraryApplicationService } from "../lib/library/application-service";
+import { ChromeRuntimeEventPublisher } from "../lib/events/chrome-runtime-event-publisher";
+
+const libraryApplicationService = new LibraryApplicationService(
+  libraryRepository,
+  new ChromeRuntimeEventPublisher()
+);
 
 export async function handleStartPreview(message: StartPreviewMessage): Promise<SaveComponentResponse> {
   if (!message.component?.id) {
@@ -184,6 +197,45 @@ export async function handleApplySavedPreviewOnTab(
     return {
       ok: false,
       error: error instanceof Error ? error.message : "Could not apply saved preview on tab"
+    };
+  }
+}
+
+export async function handleRequestAdaptationPatch(
+  message: RequestAdaptationPatchMessage
+): Promise<RequestAdaptationPatchResponse> {
+  return requestAdaptationPatch(message.payload);
+}
+
+export async function handleSaveAdaptedComponentRevision(
+  message: SaveAdaptedComponentRevisionMessage
+): Promise<SaveAdaptedComponentRevisionResponse> {
+  try {
+    await libraryRepository.initLibrary();
+    const component = await libraryRepository.getComponent(message.payload.componentId);
+    if (!component) {
+      return {
+        ok: false,
+        error: "Component not found"
+      };
+    }
+    const adaptedSnapshot = createAdaptedComponentSnapshot(component, {
+      adaptedHtml: message.payload.adaptedHtml,
+      adaptedCssText: message.payload.adaptedCssText,
+      summary: message.payload.summary,
+      warnings: message.payload.warnings,
+      confidence: message.payload.confidence,
+      themeFingerprint: message.payload.themeFingerprint
+    });
+    const savedComponent = await libraryApplicationService.saveComponent(adaptedSnapshot);
+    return {
+      ok: true,
+      component: savedComponent
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Could not save adapted revision"
     };
   }
 }

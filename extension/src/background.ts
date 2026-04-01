@@ -1,4 +1,6 @@
 import {
+  type RequestAdaptationPatchResponse,
+  type SaveAdaptedComponentRevisionResponse,
   type ApplySavedPreviewOnTabResponse,
   isIncomingRuntimeMessage,
   isPreviewStatusMessage,
@@ -17,6 +19,8 @@ import { generateCapturePreview, processComponentThumbnail } from "./background/
 import {
   handleApplySavedPreview,
   handleApplySavedPreviewOnTab,
+  handleRequestAdaptationPatch,
+  handleSaveAdaptedComponentRevision,
   handleListSavedPreviewsForPage,
   handlePreviewStatus,
   handleSavePreviewScene,
@@ -136,6 +140,31 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
           ok: false,
           error: error instanceof Error ? error.message : "Unable to apply saved preview on active tab"
         } satisfies ApplySavedPreviewOnTabResponse);
+      });
+    return true;
+  }
+
+  if (message.type === "REQUEST_ADAPTATION_PATCH") {
+    handleRequestAdaptationPatch(message)
+      .then((response) => sendResponse(response satisfies RequestAdaptationPatchResponse))
+      .catch((error: unknown) => {
+        sendResponse({
+          ok: false,
+          code: "unknown_error",
+          error: error instanceof Error ? error.message : "Unable to request adaptation patch"
+        } satisfies RequestAdaptationPatchResponse);
+      });
+    return true;
+  }
+
+  if (message.type === "SAVE_ADAPTED_COMPONENT_REVISION") {
+    handleSaveAdaptedComponentRevision(message)
+      .then((response) => sendResponse(response satisfies SaveAdaptedComponentRevisionResponse))
+      .catch((error: unknown) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Unable to save adapted component revision"
+        } satisfies SaveAdaptedComponentRevisionResponse);
       });
     return true;
   }

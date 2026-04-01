@@ -14,12 +14,14 @@ export type InsertedPreviewRecord = {
   component: SavedComponent;
   relation: InsertionRelation;
   alignment: PreviewAlignment;
+  magicState: "idle" | "loading" | "success" | "failure";
 };
 
 type InsertedPreviewRegistryDeps = {
   onActivePreviewChanged: (previewId: string | null) => void;
   onPreviewRemoved: (previewId: string, notify: boolean, reason: RegistryRemovalReason) => void;
   onRetargetRequested: (component: SavedComponent) => void;
+  onMagicAdaptRequested: (previewId: string) => void;
 };
 
 export type InsertedPreviewRegistry = ReturnType<typeof createInsertedPreviewRegistry>;
@@ -79,6 +81,10 @@ export function createInsertedPreviewRegistry(deps: InsertedPreviewRegistryDeps)
         remove(inserted.previewId);
         deps.onRetargetRequested(component);
       },
+      onMagicAdapt: () => {
+        markActive(inserted.previewId);
+        deps.onMagicAdaptRequested(inserted.previewId);
+      },
       onRelationChange: (nextRelation) => {
         markActive(inserted.previewId);
         replacePlacement(inserted.previewId, nextRelation);
@@ -101,7 +107,8 @@ export function createInsertedPreviewRegistry(deps: InsertedPreviewRegistryDeps)
       host,
       component,
       relation,
-      alignment
+      alignment,
+      magicState: "idle"
     });
     markActive(inserted.previewId);
   };
@@ -120,6 +127,7 @@ export function createInsertedPreviewRegistry(deps: InsertedPreviewRegistryDeps)
     remove(previewId, { notify: false });
     const inserted = insertPreview(record.host, record.component, relation, alignment);
     register(inserted, record.host, record.component, relation, alignment);
+    updateMagicState(inserted.previewId, record.magicState);
   };
 
   const clear = (notify: boolean = true): void => {
@@ -133,6 +141,22 @@ export function createInsertedPreviewRegistry(deps: InsertedPreviewRegistryDeps)
     clear(false);
   };
 
+  const updateMagicState = (
+    previewId: string,
+    magicState: "idle" | "loading" | "success" | "failure"
+  ): void => {
+    const record = recordsById.get(previewId);
+    if (!record) {
+      return;
+    }
+    record.magicState = magicState;
+    record.toolbar.update({
+      relation: record.relation,
+      alignment: record.alignment,
+      magicState
+    });
+  };
+
   return {
     register,
     remove,
@@ -143,6 +167,15 @@ export function createInsertedPreviewRegistry(deps: InsertedPreviewRegistryDeps)
     getActivePreviewId: (): string | null => activePreviewId,
     getLastInsertedPreviewId,
     size: (): number => recordsById.size,
-    list: (): InsertedPreviewRecord[] => Array.from(recordsById.values())
+    list: (): InsertedPreviewRecord[] => Array.from(recordsById.values()),
+    getById: (previewId: string): InsertedPreviewRecord | null => recordsById.get(previewId) ?? null,
+    updateComponent: (previewId: string, component: SavedComponent): void => {
+      const record = recordsById.get(previewId);
+      if (!record) {
+        return;
+      }
+      record.component = component;
+    },
+    updateMagicState
   };
 }

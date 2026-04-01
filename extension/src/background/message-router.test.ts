@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   handleApplySavedPreview,
   handleApplySavedPreviewOnTab,
+  handleRequestAdaptationPatch,
+  handleSaveAdaptedComponentRevision,
   handleListSavedPreviewsForPage,
   handleSavePreviewScene,
   handleStartPreview
@@ -23,19 +25,36 @@ vi.mock("./session-store", () => ({
   updatePreviewSession: vi.fn(async () => undefined)
 }));
 
+vi.mock("./adaptation/client", () => ({
+  requestAdaptationPatch: vi.fn(async () => ({
+    ok: true,
+    patch: {
+      strategy: "css_override",
+      summary: "Adapted",
+      overrideCss: "#spectra-root { color: inherit; }",
+      attributeEdits: [],
+      preservedNodeIds: [],
+      confidence: 0.6,
+      warnings: []
+    }
+  }))
+}));
+
 vi.mock("../lib/library/repository", () => ({
   libraryRepository: {
     initLibrary: vi.fn(async () => undefined),
     saveSavedPreview: vi.fn(async (preview) => preview),
     listSavedPreviewsForPage: vi.fn(async () => []),
     getSavedPreview: vi.fn(async () => null),
-    getComponent: vi.fn(async () => null)
+    getComponent: vi.fn(async () => null),
+    saveComponent: vi.fn(async (component) => component)
   }
 }));
 
 const { injectPreviewRuntime } = await import("./injector");
 const { requireActiveTab, assertPreviewEligibleTab } = await import("./tab-gate");
 const { setPreviewSession, updatePreviewSession } = await import("./session-store");
+const { requestAdaptationPatch } = await import("./adaptation/client");
 const { libraryRepository } = await import("../lib/library/repository");
 
 function createComponent(id: string): SavedComponent {
@@ -72,6 +91,9 @@ function createStartPreviewMessage(overrides: Partial<StartPreviewMessage> = {})
 beforeEach(() => {
   vi.clearAllMocks();
   Reflect.set(globalThis, "chrome", {
+    runtime: {
+      sendMessage: vi.fn(async () => undefined)
+    },
     tabs: {
       sendMessage: vi.fn(async () => undefined)
     }
@@ -293,5 +315,125 @@ describe("saved preview router handlers", () => {
     });
     expect(injectPreviewRuntime).not.toHaveBeenCalled();
     expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("forwards adaptation patch requests through adaptation client", async () => {
+    const response = await handleRequestAdaptationPatch({
+      type: "REQUEST_ADAPTATION_PATCH",
+      payload: {
+        targetSiteContext: {
+          page: {
+            origin: "https://example.com",
+            pathname: "/products",
+            title: "Example"
+          },
+          theme: {
+            colors: ["rgb(15, 23, 42)"],
+            fontFamilies: ["Inter"],
+            spacingPx: [8],
+            radiusPx: [8],
+            shadows: ["none"]
+          },
+          insertionZone: {
+            tagName: "section",
+            display: "block",
+            color: "rgb(15, 23, 42)",
+            backgroundColor: "rgb(255, 255, 255)",
+            fontFamily: "Inter",
+            fontSizePx: 14,
+            lineHeightPx: 20,
+            borderRadiusPx: 8
+          },
+          nativeExemplars: [],
+          hardConstraints: {
+            maxPatchCssBytes: 16000,
+            protectedNodeIds: [],
+            forbiddenPatterns: []
+          },
+          metadata: {
+            extractedAt: "2026-04-01T12:00:00.000Z",
+            themeFingerprint: "theme_1"
+          }
+        },
+        componentPack: {
+          wrapperRootId: "spectra-root",
+          semanticRoleHint: "button",
+          normalizedHtml: "<button data-spectra-node-id='n1'>Button</button>",
+          baseCss: "#spectra-root button { color: inherit; }",
+          stableNodeIds: ["n1"],
+          protectedNodeIds: []
+        }
+      }
+    });
+
+    expect(response.ok).toBe(true);
+    expect(requestAdaptationPatch).toHaveBeenCalledOnce();
+  });
+
+  it("saves adapted component revision as new active snapshot", async () => {
+    vi.mocked(libraryRepository.getComponent).mockResolvedValueOnce({
+      ...createComponent("cmp-1"),
+      html: "<div data-spectra-node-id='n1'>old</div>",
+      cssText: "#old { color: red; }"
+    });
+    const response = await handleSaveAdaptedComponentRevision({
+      type: "SAVE_ADAPTED_COMPONENT_REVISION",
+      payload: {
+        componentId: "cmp-1",
+        adaptedHtml: "<div data-spectra-node-id='n1'>new</div>",
+        adaptedCssText: "#new { color: blue; }",
+        summary: "Adapted to target theme",
+        warnings: ["contrast tuned"],
+        confidence: 0.72,
+        themeFingerprint: "theme_abc"
+      }
+    });
+
+    expect(response.ok).toBe(true);
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "LIBRARY_UPDATED"
+      })
+    );
+    expect(response).toMatchObject({
+      ok: true,
+      component: {
+        id: "cmp-1",
+        html: "<div data-spectra-node-id='n1'>new</div>",
+        cssText: "#new { color: blue; }",
+        activeRevisionId: 2
+      }
+    });
+    expect(libraryRepository.saveComponent).toHaveBeenCalledOnce();
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "LIBRARY_UPDATED"
+      })
+    );
+    expect(response.component).toMatchObject({
+      activeRevisionId: 2
+    });
+    expect(response.component?.revisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 1,
+          source: "capture",
+          isActive: false
+        }),
+        expect.objectContaining({
+          id: 2,
+          source: "adaptation",
+          isActive: true
+        })
+      ])
+    );
+    expect(response.component).toMatchObject(
+      expect.objectContaining({
+        id: "cmp-1",
+        html: "<div data-spectra-node-id='n1'>new</div>",
+        cssText: "#new { color: blue; }",
+        activeRevisionId: 2
+      })
+    );
   });
 });

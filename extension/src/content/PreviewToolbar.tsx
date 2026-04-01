@@ -7,13 +7,27 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { AlignCenterVertical, AlignEndVertical, AlignStartVertical, Check, ChevronDown, Crosshair, MoveHorizontal, Undo2 } from "lucide-react";
+import {
+  AlignCenterVertical,
+  AlignEndVertical,
+  AlignStartVertical,
+  AlertCircle,
+  Check,
+  ChevronDown,
+  Crosshair,
+  Loader2,
+  MoveHorizontal,
+  Sparkles,
+  Undo2
+} from "lucide-react";
 
 type PreviewToolbarProps = {
   relation: InsertionRelation;
   alignment: PreviewAlignment;
+  magicState: "idle" | "loading" | "success" | "failure";
   onUndo: () => void;
   onRetarget: () => void;
+  onMagicAdapt: () => void;
   onRelationChange: (relation: InsertionRelation) => void;
   onAlignmentChange: (alignment: PreviewAlignment) => void;
 };
@@ -37,11 +51,30 @@ const ALIGNMENT_OPTIONS: Array<{
 export function PreviewToolbar({
   relation,
   alignment,
+  magicState,
   onUndo,
   onRetarget,
+  onMagicAdapt,
   onRelationChange,
   onAlignmentChange
 }: PreviewToolbarProps) {
+  const isMagicLoading = magicState === "loading";
+  const magicButtonToneClass = magicState === "success"
+    ? "border-emerald-400/60 bg-emerald-500/25 text-emerald-100"
+    : magicState === "failure"
+      ? "border-rose-400/60 bg-rose-500/25 text-rose-100"
+      : "border-[rgba(148,163,184,0.4)] bg-[rgba(15,23,42,1)] text-slate-50";
+
+  const magicIcon = isMagicLoading ? (
+    <Loader2 size={13} strokeWidth={2} aria-hidden="true" className="shrink-0 animate-spin" />
+  ) : magicState === "success" ? (
+    <Check size={13} strokeWidth={2} aria-hidden="true" className="shrink-0" />
+  ) : magicState === "failure" ? (
+    <AlertCircle size={13} strokeWidth={2} aria-hidden="true" className="shrink-0" />
+  ) : (
+    <Sparkles size={13} strokeWidth={2} aria-hidden="true" className="shrink-0" />
+  );
+
   return (
     <div className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(148,163,184,0.28)] bg-[rgba(17,24,39,0.95)] p-1.5 font-sans text-[11px] leading-none text-slate-50 shadow-[0_10px_22px_rgba(0,0,0,0.25)]">
       <Button
@@ -65,6 +98,18 @@ export function PreviewToolbar({
         onClick={onRetarget}
       >
         <Crosshair size={12} strokeWidth={2} aria-hidden="true" className="shrink-0" />
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-label="Adapt component style"
+        title={isMagicLoading ? "Adapting..." : "Adapt component style"}
+        disabled={isMagicLoading}
+        className={`h-6 w-7 cursor-pointer rounded-md p-0 transition-colors hover:bg-[rgba(30,41,59,1)] hover:text-slate-50 focus-visible:ring-2 focus-visible:ring-[rgba(148,163,184,0.5)] ${magicButtonToneClass}`}
+        onClick={onMagicAdapt}
+      >
+        {magicIcon}
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

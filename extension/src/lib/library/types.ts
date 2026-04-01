@@ -29,6 +29,22 @@ export type ThumbnailMeta = {
   blurredBackdropDataUrl: string;
 };
 
+export type ComponentRevisionSource = "capture" | "adaptation";
+
+export type ComponentRevision = {
+  id: number;
+  source: ComponentRevisionSource;
+  parentRevisionId: number | null;
+  html: string;
+  cssText: string;
+  summary: string;
+  warnings: string[];
+  confidence: number;
+  themeFingerprint: string;
+  createdAt: string;
+  isActive: boolean;
+};
+
 export type SavedComponent = {
   id: string;
   collectionIds: string[];
@@ -40,6 +56,8 @@ export type SavedComponent = {
   screenshotDataUrl: string;
   thumbnailMeta?: ThumbnailMeta;
   sourceHostSignature: HostSignature;
+  revisions?: ComponentRevision[];
+  activeRevisionId?: number;
 };
 
 export type PreviewMatchMode = "exact_path" | "path_prefix";

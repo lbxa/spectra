@@ -90,15 +90,20 @@ vi.mock("./preview-insert", () => ({
 }));
 
 vi.mock("./preview-toolbar", () => ({
-  createPreviewToolbar: vi.fn((handlers: { onUndo: () => void }) => {
+  createPreviewToolbar: vi.fn((handlers: { onUndo: () => void; onMagicAdapt: () => void }) => {
     const toolbar = document.createElement("div");
     toolbar.setAttribute("data-mock-toolbar", "true");
     const undo = document.createElement("button");
     undo.setAttribute("data-action", "undo");
     undo.addEventListener("click", handlers.onUndo);
+    const magic = document.createElement("button");
+    magic.setAttribute("data-action", "magic");
+    magic.addEventListener("click", handlers.onMagicAdapt);
     toolbar.appendChild(undo);
+    toolbar.appendChild(magic);
 
     return {
+      update: vi.fn(),
       mount(target: HTMLElement) {
         const previewId = target.getAttribute("data-spectra-preview-id") ?? "";
         toolbar.setAttribute("data-for-preview-id", previewId);
@@ -450,6 +455,71 @@ describe("preview-entry multi preview behavior", () => {
 
     expect(document.querySelector('[data-spectra-preview-id="preview_1"]')).toBeNull();
     expect(document.querySelector('[data-spectra-preview-id="preview_2"]')).not.toBeNull();
+  });
+
+  it("runs adaptation request flow from magic button", async () => {
+    const firstHost = createCandidateHost("host-1");
+    await loadRuntime();
+    vi.mocked(chrome.runtime.sendMessage).mockImplementation(async (message: unknown) => {
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        Reflect.get(message, "type") === "REQUEST_ADAPTATION_PATCH"
+      ) {
+        return {
+          ok: true,
+          patch: {
+            strategy: "css_override",
+            summary: "Adapted style",
+            overrideCss: "#spectra-adapt-root-preview_1 { color: rgb(17, 24, 39); }",
+            attributeEdits: [],
+            preservedNodeIds: [],
+            confidence: 0.81,
+            warnings: []
+          }
+        };
+      }
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        Reflect.get(message, "type") === "SAVE_ADAPTED_COMPONENT_REVISION"
+      ) {
+        return {
+          ok: true,
+          component: createComponent("cmp-1")
+        };
+      }
+      return undefined;
+    });
+
+    testState.candidate = {
+      element: firstHost,
+      rect: firstHost.getBoundingClientRect(),
+      signature: createComponent("cmp-1").sourceHostSignature
+    };
+    await beginTargeting(createComponent("cmp-1"));
+    firstHost.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    await flushWork();
+
+    const magicButton = document.querySelector(
+      '[data-mock-toolbar="true"][data-for-preview-id="preview_1"] [data-action="magic"]'
+    );
+    if (!(magicButton instanceof HTMLButtonElement)) {
+      throw new Error("Expected magic button");
+    }
+    magicButton.click();
+    await flushWork();
+
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "REQUEST_ADAPTATION_PATCH"
+      })
+    );
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "SAVE_ADAPTED_COMPONENT_REVISION"
+      })
+    );
   });
 
   it("saves current scene through global session toolbar action", async () => {

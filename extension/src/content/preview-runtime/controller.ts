@@ -1,5 +1,9 @@
-import type { ApplySavedPreviewMessage, BeginTargetingMessage } from "../../lib/library/messages";
+import type {
+  ApplySavedPreviewMessage,
+  BeginTargetingMessage
+} from "../../lib/library/messages";
 import type { SavedComponent } from "../../lib/library/types";
+import type { AdaptationPatch } from "../../lib/adaptation/types";
 import { rankCandidates } from "../candidate-rank";
 import { scanCandidateContainers, type CandidateContainer } from "../candidate-scan";
 import { mountOverlayRoot, type OverlayRoot } from "../overlay-root";
@@ -11,6 +15,7 @@ import {
 } from "../picker-ui/ShortcutsHud";
 import {
   createInsertedPreviewRegistry,
+  type InsertedPreviewRecord,
   type InsertedPreviewRegistry
 } from "./inserted-preview-registry";
 import {
@@ -36,6 +41,13 @@ import {
   createPreviewSessionToolbar,
   type PreviewSessionToolbarControls
 } from "../preview-session-toolbar";
+import { buildComponentPack } from "../adapt/build-component-pack";
+import { extractTargetSiteContext } from "../theme/extract-target-site-context";
+import { requestAdaptation } from "../adapt/request-adaptation";
+import { validateAdaptationPatch } from "../adapt/validate-adaptation-patch";
+import { applyAdaptationPatch } from "../adapt/apply-adaptation-patch";
+import { persistAdaptedRevision } from "../adapt/persist-adapted-revision";
+import { trackAdaptationEvent } from "../adapt/telemetry";
 
 export type PreviewRuntime = {
   teardown: () => void;
@@ -177,6 +189,9 @@ export function createPreviewRuntime(options: PreviewRuntimeOptions = {}): Previ
     },
     onRetargetRequested: (component) => {
       void beginTargeting({ type: "BEGIN_TARGETING", component });
+    },
+    onMagicAdaptRequested: (previewId) => {
+      void adaptInsertedPreview(previewId);
     }
   });
 
@@ -368,6 +383,114 @@ export function createPreviewRuntime(options: PreviewRuntimeOptions = {}): Previ
   }
 
   chrome.runtime.onMessage.addListener(onRuntimeMessage);
+
+  async function adaptInsertedPreview(previewId: string): Promise<void> {
+    const record = registry.getById(previewId);
+    if (!record) {
+      ensureOverlay().showToast("Could not find preview to adapt");
+      return;
+    }
+
+    trackAdaptationEvent("magic_button_clicked", { previewId });
+    registry.updateMagicState(previewId, "loading");
+    trackAdaptationEvent("request_started", { previewId });
+
+    try {
+      const componentPack = buildComponentPack(record);
+      const targetSiteContext = extractTargetSiteContext({
+        insertionHost: record.host,
+        protectedNodeIds: componentPack.protectedNodeIds
+      });
+
+      const response = await runWithBusyState(() =>
+        requestAdaptation({
+          targetSiteContext,
+          componentPack
+        })
+      );
+      if (!response.ok || !response.patch) {
+        trackAdaptationEvent("request_failed", {
+          previewId,
+          code: response.code || "unknown_error"
+        });
+        registry.updateMagicState(previewId, "failure");
+        ensureOverlay().showToast(response.error || "Adaptation failed");
+        scheduleMagicStateReset(previewId);
+        return;
+      }
+
+      const patch = response.patch;
+      trackAdaptationEvent("request_succeeded", {
+        previewId,
+        confidence: patch.confidence
+      });
+      await applyAndPersistAdaptationPatch(previewId, record, patch, targetSiteContext.metadata.themeFingerprint);
+    } catch (error) {
+      trackAdaptationEvent("request_failed", { previewId, code: "unknown_error" });
+      registry.updateMagicState(previewId, "failure");
+      ensureOverlay().showToast(error instanceof Error ? error.message : "Adaptation failed");
+      scheduleMagicStateReset(previewId);
+    }
+  }
+
+  async function applyAndPersistAdaptationPatch(
+    previewId: string,
+    record: InsertedPreviewRecord,
+    patch: AdaptationPatch,
+    themeFingerprint: string
+  ): Promise<void> {
+    const componentPack = buildComponentPack(record);
+    const validation = validateAdaptationPatch(patch, componentPack);
+    if (!validation.ok) {
+      trackAdaptationEvent("patch_rejected", {
+        previewId,
+        reason: validation.reason
+      });
+      registry.updateMagicState(previewId, "failure");
+      ensureOverlay().showToast("Adaptation rejected as unsafe");
+      scheduleMagicStateReset(previewId);
+      return;
+    }
+
+    const applied = applyAdaptationPatch({
+      record,
+      patch
+    });
+    trackAdaptationEvent("patch_applied", { previewId });
+
+    const saveResponse = await runWithBusyState(() =>
+      persistAdaptedRevision({
+        componentId: record.component.id,
+        adaptedHtml: applied.adaptedHtml,
+        adaptedCssText: applied.adaptedCssText,
+        summary: patch.summary,
+        warnings: patch.warnings,
+        confidence: patch.confidence,
+        themeFingerprint
+      })
+    );
+    if (!saveResponse?.ok || !saveResponse.component) {
+      registry.updateMagicState(previewId, "failure");
+      ensureOverlay().showToast(saveResponse?.error || "Adaptation saved failed");
+      scheduleMagicStateReset(previewId);
+      return;
+    }
+
+    registry.updateComponent(previewId, saveResponse.component);
+    registry.updateMagicState(previewId, "success");
+    trackAdaptationEvent("adapted_revision_saved", {
+      previewId,
+      componentId: saveResponse.component.id
+    });
+    ensureOverlay().showToast("Adaptation applied");
+    scheduleMagicStateReset(previewId);
+  }
+
+  function scheduleMagicStateReset(previewId: string): void {
+    globalThis.setTimeout(() => {
+      registry.updateMagicState(previewId, "idle");
+    }, 1200);
+  }
 
   return {
     teardown

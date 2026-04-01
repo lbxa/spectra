@@ -1,4 +1,12 @@
-import { INBOX_COLLECTION_ID, type Collection, type HostSignature, type SavedComponent, type ThumbnailMeta } from "../types";
+import {
+  INBOX_COLLECTION_ID,
+  type Collection,
+  type ComponentRevisionSource,
+  type ComponentRevision,
+  type HostSignature,
+  type SavedComponent,
+  type ThumbnailMeta
+} from "../types";
 
 const COLLECTION_NAME_MAX_LENGTH = 60;
 const COLLECTION_DESCRIPTION_MAX_LENGTH = 280;
@@ -47,6 +55,13 @@ export function normalizeComponentInput(input: SavedComponent, defaultCollection
   const fallbackTitle = deriveFallbackTitle(input.url);
   const normalizedTitle = input.title.trim() || fallbackTitle;
   const normalizedCollectionIds = normalizeCollectionIds(input.collectionIds, defaultCollectionId);
+  const normalizedRevisions = normalizeComponentRevisions(input.revisions, {
+    html: input.html,
+    cssText: input.cssText,
+    capturedAt: capturedAt.toISOString()
+  });
+  const normalizedActiveRevisionId = normalizeActiveRevisionId(normalizedRevisions, input.activeRevisionId);
+  const activeRevision = normalizedRevisions.find((revision) => revision.id === normalizedActiveRevisionId) ?? normalizedRevisions[0];
 
   return {
     id: input.id.trim(),
@@ -54,22 +69,35 @@ export function normalizeComponentInput(input: SavedComponent, defaultCollection
     url: input.url.trim(),
     title: normalizedTitle,
     capturedAt: capturedAt.toISOString(),
-    html: input.html,
-    cssText: input.cssText,
+    html: activeRevision.html,
+    cssText: activeRevision.cssText,
     screenshotDataUrl: input.screenshotDataUrl,
     thumbnailMeta: normalizeThumbnailMeta(input.thumbnailMeta),
-    sourceHostSignature: normalizeHostSignature(input.sourceHostSignature)
+    sourceHostSignature: normalizeHostSignature(input.sourceHostSignature),
+    revisions: normalizedRevisions,
+    activeRevisionId: normalizedActiveRevisionId
   };
 }
 
 export function normalizeStoredComponent(component: SavedComponent, defaultCollectionId: string): SavedComponent {
   const collectionIds = normalizeCollectionIds(component.collectionIds, defaultCollectionId);
   const sourceHostSignature = normalizeHostSignature(component.sourceHostSignature);
+  const normalizedRevisions = normalizeComponentRevisions(component.revisions, {
+    html: component.html,
+    cssText: typeof component.cssText === "string" ? component.cssText : "",
+    capturedAt: component.capturedAt
+  });
+  const normalizedActiveRevisionId = normalizeActiveRevisionId(normalizedRevisions, component.activeRevisionId);
+  const activeRevision =
+    normalizedRevisions.find((revision) => revision.id === normalizedActiveRevisionId) ?? normalizedRevisions[0];
   return {
     ...component,
     collectionIds,
-    cssText: typeof component.cssText === "string" ? component.cssText : "",
-    sourceHostSignature
+    html: activeRevision.html,
+    cssText: activeRevision.cssText,
+    sourceHostSignature,
+    revisions: normalizedRevisions,
+    activeRevisionId: normalizedActiveRevisionId
   };
 }
 
@@ -214,4 +242,96 @@ function deriveFallbackTitle(url: string): string {
     // Ignore parsing errors and use default fallback.
   }
   return "Untitled component";
+}
+
+function normalizeComponentRevisions(
+  revisions: SavedComponent["revisions"],
+  fallback: {
+    html: string;
+    cssText: string;
+    capturedAt: string;
+  }
+): ComponentRevision[] {
+  const normalized = Array.isArray(revisions)
+    ? revisions
+      .filter((revision): revision is ComponentRevision => Boolean(revision && revision.id > 0))
+      .map((revision) => ({
+        id: Math.max(1, Math.floor(revision.id)),
+        source: (revision.source === "adaptation" ? "adaptation" : "capture") as ComponentRevisionSource,
+        parentRevisionId:
+          typeof revision.parentRevisionId === "number" && revision.parentRevisionId > 0
+            ? Math.floor(revision.parentRevisionId)
+            : null,
+        html: typeof revision.html === "string" && revision.html.length > 0 ? revision.html : fallback.html,
+        cssText: typeof revision.cssText === "string" ? revision.cssText : fallback.cssText,
+        summary:
+          typeof revision.summary === "string" && revision.summary.trim().length > 0
+            ? revision.summary.trim()
+            : revision.source === "adaptation"
+              ? "Adapted revision"
+              : "Original captured revision",
+        warnings: Array.isArray(revision.warnings)
+          ? revision.warnings.filter((warning): warning is string => typeof warning === "string")
+          : [],
+        confidence:
+          typeof revision.confidence === "number" && Number.isFinite(revision.confidence)
+            ? Math.max(0, Math.min(1, revision.confidence))
+            : revision.source === "adaptation"
+              ? 0.5
+              : 1,
+        themeFingerprint: typeof revision.themeFingerprint === "string" ? revision.themeFingerprint : "",
+        createdAt: normalizeIsoTimestamp(revision.createdAt, fallback.capturedAt),
+        isActive: Boolean(revision.isActive)
+      }))
+    : [];
+
+  if (normalized.length > 0) {
+    return normalized.sort((left, right) => left.id - right.id);
+  }
+
+  return [
+    {
+      id: 1,
+      source: "capture",
+      parentRevisionId: null,
+      html: fallback.html,
+      cssText: fallback.cssText,
+      summary: "Original captured revision",
+      warnings: [],
+      confidence: 1,
+      themeFingerprint: "",
+      createdAt: normalizeIsoTimestamp(fallback.capturedAt, new Date().toISOString()),
+      isActive: true
+    }
+  ];
+}
+
+function normalizeActiveRevisionId(
+  revisions: ComponentRevision[],
+  candidateActiveRevisionId: SavedComponent["activeRevisionId"]
+): number {
+  const activeFromCandidate =
+    typeof candidateActiveRevisionId === "number" && revisions.some((revision) => revision.id === candidateActiveRevisionId)
+      ? candidateActiveRevisionId
+      : null;
+  if (activeFromCandidate) {
+    return activeFromCandidate;
+  }
+  const activeFlaggedRevision = revisions.find((revision) => revision.isActive);
+  if (activeFlaggedRevision) {
+    return activeFlaggedRevision.id;
+  }
+  return revisions[revisions.length - 1]?.id ?? 1;
+}
+
+function normalizeIsoTimestamp(value: string, fallback: string): string {
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString();
+  }
+  const fallbackParsed = new Date(fallback);
+  if (!Number.isNaN(fallbackParsed.getTime())) {
+    return fallbackParsed.toISOString();
+  }
+  return new Date().toISOString();
 }

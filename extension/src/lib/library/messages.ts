@@ -6,6 +6,7 @@ import type {
   SavedPreviewApplyResult,
   SavedPreviewListItem
 } from "./types";
+import type { AdaptRequest, AdaptationFailureCode, AdaptationPatch } from "../adaptation/types";
 
 export type Bounds = {
   left: number;
@@ -81,6 +82,37 @@ export type ApplySavedPreviewOnTabMessage = {
   payload: {
     previewId: string;
   };
+};
+
+export type RequestAdaptationPatchMessage = {
+  type: "REQUEST_ADAPTATION_PATCH";
+  payload: AdaptRequest;
+};
+
+export type RequestAdaptationPatchResponse = {
+  ok: boolean;
+  patch?: AdaptationPatch;
+  code?: AdaptationFailureCode;
+  error?: string;
+};
+
+export type SaveAdaptedComponentRevisionMessage = {
+  type: "SAVE_ADAPTED_COMPONENT_REVISION";
+  payload: {
+    componentId: string;
+    adaptedHtml: string;
+    adaptedCssText: string;
+    summary: string;
+    warnings: string[];
+    confidence: number;
+    themeFingerprint: string;
+  };
+};
+
+export type SaveAdaptedComponentRevisionResponse = {
+  ok: boolean;
+  component?: SavedComponent;
+  error?: string;
 };
 
 export type BeginTargetingMessage = {
@@ -168,6 +200,8 @@ export type IncomingRuntimeMessage =
   | ListSavedPreviewsForPageMessage
   | ApplySavedPreviewMessage
   | ApplySavedPreviewOnTabMessage
+  | RequestAdaptationPatchMessage
+  | SaveAdaptedComponentRevisionMessage
   | PreviewStatusMessage;
 
 export function isIncomingRuntimeMessage(message: unknown): message is IncomingRuntimeMessage {
@@ -208,6 +242,14 @@ export function isIncomingRuntimeMessage(message: unknown): message is IncomingR
   }
 
   if (message.type === "APPLY_SAVED_PREVIEW_ON_TAB") {
+    return "payload" in message;
+  }
+
+  if (message.type === "REQUEST_ADAPTATION_PATCH") {
+    return "payload" in message;
+  }
+
+  if (message.type === "SAVE_ADAPTED_COMPONENT_REVISION") {
     return "payload" in message;
   }
 
