@@ -28,3 +28,18 @@
 - Centralize save/load/apply preview side effects in a dedicated service; use one busy-state wrapper to prevent duplicated UI toggling logic.
 - Extract pure preview utilities (target key normalization, anchor resolve, layout normalization) into helper modules and keep event wiring imperative code separate.
 - Validate refactors with characterization tests first, then run required gates: `bun run typecheck` and `bun run build`.
+
+## Imperative Surface Runtime Learnings (Current Baseline)
+
+- Treat preview/capture surfaces as a mini-editor runtime, not ordinary app screens.
+- Keep `extension/src/content.ts` and `extension/src/content/preview-entry.ts` orchestration-only; move interaction/runtime logic into session modules.
+- Keep preview transitions command-driven and explicit through:
+  - `extension/src/content/preview-runtime/surface-model.ts`
+  - `extension/src/content/preview-runtime/surface-commands.ts`
+  - `extension/src/content/preview-runtime/surface-reducer.ts`
+- Keep side effects centralized in `extension/src/content/preview-runtime/preview-session.ts` and `preview-effects.ts`; avoid scattered DOM writes from components.
+- Keep overlay/tool chrome lifecycle centralized in `extension/src/content/preview-runtime/overlay-manager.ts`.
+- Keep tool-style input routing in `extension/src/content/targeting/interaction-controller.ts`; avoid split delete/cancel paths across multiple listeners.
+- Keep capture session lifecycle under `extension/src/content/capture/capture-session.ts` with explicit cleanup ownership.
+- Keep inference safety explicit: use diagnostics + confidence gates in `extension/src/content/preview-runtime/saved-preview-service.ts` (fallback, unstable anchors, partial apply).
+- Before major runtime refactors, freeze behavior with characterization + UI chrome tests (`PreviewSessionToolbar`, `PreviewToolbar`, `ShortcutsHud`) to prevent accidental regressions.

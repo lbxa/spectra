@@ -25,6 +25,7 @@ export default {
     }],
     "@semantic-release/release-notes-generator",
     ["@semantic-release/exec", {
+      verifyConditionsCmd: "bun scripts/release/bootstrap-npm-pkg-root.ts",
       prepareCmd: "bun scripts/release/prepare-release.ts ${nextRelease.version} ${branch.name}",
     }],
     ["@semantic-release/npm", {
@@ -36,6 +37,7 @@ export default {
       assets: [
         { path: ".release/artifacts/*.zip", label: "Spectra extension ZIP" },
       ],
+      labels: false,
     }],
   ],
 };

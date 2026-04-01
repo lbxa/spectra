@@ -45,6 +45,21 @@ When evaluating content preview runtime work (for example `preview-entry.ts`, `p
 - Keep pure utilities (target normalization, anchor resolution, layout normalization) separate from DOM/event side effects.
 - Preserve behavior and contracts; verify with characterization tests plus `bun run typecheck` and `bun run build`.
 
+## Imperative Surface Runtime Baseline
+
+Treat capture and preview as a mini-editor runtime, not ordinary page UI.
+
+- Keep `extension/src/content.ts` and `extension/src/content/preview-entry.ts` bootstrap-only.
+- Keep preview surface state/commands/transitions explicit:
+  - `extension/src/content/preview-runtime/surface-model.ts`
+  - `extension/src/content/preview-runtime/surface-commands.ts`
+  - `extension/src/content/preview-runtime/surface-reducer.ts`
+- Keep side effects centralized in `extension/src/content/preview-runtime/preview-session.ts` + `preview-effects.ts`; avoid direct DOM writes from view components.
+- Route overlay/session chrome through `extension/src/content/preview-runtime/overlay-manager.ts`.
+- Route pointer/keyboard input through `extension/src/content/targeting/interaction-controller.ts`; do not reintroduce ad-hoc global listener paths in preview controller code.
+- Keep capture interaction/session lifecycle under `extension/src/content/capture/capture-session.ts` with explicit cleanup ownership.
+- Treat diagnostics as product state (not logs) via `extension/src/content/preview-runtime/diagnostics.ts` and confidence-gated apply behavior in `saved-preview-service.ts`.
+
 ## File Naming
 
 - Follow React conventions for components: use `PascalCase` for React component filenames and component symbols.

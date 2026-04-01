@@ -4,6 +4,7 @@ type TargetingEventContext = {
 
 type InteractionControllerHandlers = {
   isActive: () => boolean;
+  isKeyActive?: () => boolean;
   onHover?: (event: MouseEvent, target: Element, context: TargetingEventContext) => void;
   onCommit?: (event: MouseEvent, target: Element, context: TargetingEventContext) => void;
   onCancel?: (event: KeyboardEvent) => void;
@@ -24,6 +25,7 @@ export function createInteractionController(handlers: InteractionControllerHandl
   let teardownGuards: (() => void) | null = null;
 
   const isDone = (): boolean => !handlers.isActive();
+  const isKeyActive = (): boolean => (handlers.isKeyActive ? handlers.isKeyActive() : handlers.isActive());
 
   const onMouseMove = (event: MouseEvent): void => {
     if (!handlers.isActive()) {
@@ -52,7 +54,7 @@ export function createInteractionController(handlers: InteractionControllerHandl
       isShiftHeld = true;
       handlers.onModifierChange?.({ isShiftHeld: true });
     }
-    if (!handlers.isActive()) {
+    if (!isKeyActive()) {
       return;
     }
     if (event.key === "Escape") {

@@ -15,6 +15,8 @@ import type {
   SavedPreviewListItem
 } from "../../lib/library/types";
 import type { InsertedPreviewRecord } from "./inserted-preview-registry";
+import { createRuntimeDiagnostic } from "./diagnostics";
+import type { PreviewRuntimeDiagnostic } from "./surface-model";
 import { buildAnchorSpec, buildNormalizedLayout, buildPreviewTarget, resolveAnchor } from "./helpers";
 
 type SavedPreviewServiceDeps = {
@@ -31,6 +33,7 @@ type SavedPreviewServiceDeps = {
   showToast: (message: string) => void;
   playOptimisticSaveJingle: () => void;
   showSuccessFlash: () => void;
+  onDiagnostics?: (diagnostics: PreviewRuntimeDiagnostic[]) => void;
 };
 
 export function createSavedPreviewService(deps: SavedPreviewServiceDeps) {
@@ -125,6 +128,7 @@ export function createSavedPreviewService(deps: SavedPreviewServiceDeps) {
       (response.components ?? []).map((component) => [component.id, component] as const)
     );
     const results = applySavedPreviewScene(response.preview, componentById);
+    deps.onDiagnostics?.(collectApplyDiagnostics(results));
     const appliedCount = results.filter(
       (result) => result.status === "applied" || result.status === "applied_with_fallback"
     ).length;
@@ -176,6 +180,14 @@ export function createSavedPreviewService(deps: SavedPreviewServiceDeps) {
         });
         continue;
       }
+      if (!isStableAnchor(resolution.element)) {
+        results.push({
+          instanceId: instance.id,
+          status: "anchor_not_found",
+          reason: "Anchor unstable"
+        });
+        continue;
+      }
       readyToInsert.push({
         instance,
         component,
@@ -208,4 +220,58 @@ export function createSavedPreviewService(deps: SavedPreviewServiceDeps) {
     loadSavedPreviewsForCurrentPage,
     applySavedPreviewById
   };
+}
+
+function isStableAnchor(element: HTMLElement): boolean {
+  if (!element.isConnected) {
+    return false;
+  }
+  const tagName = element.tagName.toLowerCase();
+  return tagName !== "html" && tagName !== "body";
+}
+
+function collectApplyDiagnostics(results: SavedPreviewApplyResult[]): PreviewRuntimeDiagnostic[] {
+  const diagnostics: PreviewRuntimeDiagnostic[] = [];
+  const hasPartialApply = results.some((result) => result.status !== "applied");
+  if (hasPartialApply) {
+    diagnostics.push(
+      createRuntimeDiagnostic({
+        code: "partial_apply",
+        message: "Saved preview applied with degraded confidence",
+        severity: "warning"
+      })
+    );
+  }
+  for (const result of results) {
+    if (result.status === "applied_with_fallback") {
+      diagnostics.push(
+        createRuntimeDiagnostic({
+          code: "fallback_anchor_used",
+          message: `Applied fallback anchor for instance ${result.instanceId}`,
+          severity: "info"
+        })
+      );
+      continue;
+    }
+    if (result.status === "anchor_not_found") {
+      diagnostics.push(
+        createRuntimeDiagnostic({
+          code: result.reason === "Anchor unstable" ? "anchor_unstable" : "anchor_not_found",
+          message: result.reason ?? `Anchor not found for instance ${result.instanceId}`,
+          severity: "warning"
+        })
+      );
+      continue;
+    }
+    if (result.status === "component_missing") {
+      diagnostics.push(
+        createRuntimeDiagnostic({
+          code: "component_missing",
+          message: result.reason ?? `Component missing for instance ${result.instanceId}`,
+          severity: "error"
+        })
+      );
+    }
+  }
+  return diagnostics;
 }

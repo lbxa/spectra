@@ -11,9 +11,17 @@ Chrome Extension (Manifest V3) for capturing visible UI elements as reusable ref
 
 - `public/manifest.json`: extension metadata and permissions.
 - `extension/src/content.ts`: thin capture bootstrap/orchestrator.
+- `extension/src/content/capture/capture-session.ts`: capture session runtime (input routing, overlays, commit/cancel lifecycle).
 - `extension/src/content/capture/selection-runtime.ts`: selection/interaction runtime helpers.
 - `extension/src/content/capture/snapshot-builder.ts`: standalone snapshot assembly.
 - `extension/src/content/capture/style-policy.ts`: style allowlist/default-filter policy.
+- `extension/src/content/preview-runtime/preview-session.ts`: preview session orchestration (commands, reducer dispatch, side effects).
+- `extension/src/content/preview-runtime/surface-model.ts`: preview surface mode/state model.
+- `extension/src/content/preview-runtime/surface-commands.ts`: command definitions for preview actions.
+- `extension/src/content/preview-runtime/surface-reducer.ts`: pure preview surface transitions.
+- `extension/src/content/preview-runtime/overlay-manager.ts`: centralized overlay + toolbar/HUD lifecycle.
+- `extension/src/content/preview-runtime/preview-effects.ts`: imperative preview effect helpers.
+- `extension/src/content/preview-runtime/diagnostics.ts`: runtime diagnostics model helpers.
 - `extension/src/content/capture-snapshot.ts`: scoped CSS extraction, sanitization, and asset URL rewriting primitives.
 - `extension/src/background.ts`: runtime handlers + screenshot capture/crop orchestration.
 - `extension/src/content/preview-insert.ts`: page preview insertion and CSS compatibility paths.
@@ -39,15 +47,28 @@ The extension now uses small seams to reduce duplicate transport and mutation lo
 - **Shared host signature logic**: capture and preview ranking use the same implementation in `extension/src/lib/preview/host-signature.ts`.
 - **Repository split**: indexedDB primitives, normalizers, and operation helpers are split into focused modules under `extension/src/lib/library/repository/*`.
 
+## Imperative Surface Runtime (Current Shape)
+
+Capture/preview are now implemented as a tool-style runtime with explicit boundaries:
+
+- **State machine + commands**: `surface-model.ts` + `surface-commands.ts` + `surface-reducer.ts` centralize transitions and prevent implicit mode drift.
+- **Session owner for side effects**: `preview-session.ts` owns listeners, runtime messaging, insert lifecycle, and teardown.
+- **Overlay subsystem**: `overlay-manager.ts` owns hover/selected/ghost/label/session-toolbar/shortcuts-HUD lifecycle.
+- **Effect boundary**: `preview-effects.ts` isolates imperative DOM chrome updates from state logic.
+- **Input routing**: `interaction-controller.ts` handles pointer + keyboard tool routing with active/key-active predicates.
+- **Capture parity**: `capture-session.ts` mirrors the same session-style boundary for capture mode and keeps `content.ts` thin.
+- **Diagnostics + confidence gates**: `saved-preview-service.ts` emits structured diagnostics for fallback/unstable/partial-apply paths.
+
 ## Preview Runtime: Clean Code Factors
 
 The content preview runtime refactor is exemplary because it improved clarity without changing runtime contracts:
 
-- **Single-purpose modules**: `preview-entry.ts` is now bootstrap-only, while orchestration, state transitions, and helper logic are split into focused runtime modules.
-- **Explicit state transitions**: preview mode changes (`idle`, `targeting`, `inserted`) are centralized in a reducer instead of ad-hoc writes spread across handlers.
+- **Single-purpose modules**: `preview-entry.ts` is bootstrap-only, while session orchestration, state transitions, and helper logic are split into focused runtime modules.
+- **Explicit state transitions**: preview mode changes are centralized in `surface-reducer.ts` instead of ad-hoc writes spread across handlers.
 - **Lifecycle invariants in one place**: inserted preview register/remove/replace/clear logic is consolidated in a registry, reducing drift in watcher/toolbar teardown ordering.
-- **Side-effect boundaries**: saved preview save/load/apply behavior is isolated in a dedicated service with a shared busy-state wrapper.
-- **Pure helper extraction**: anchor resolution, target normalization, and layout normalization are separated from imperative event wiring.
+- **Side-effect boundaries**: `preview-session.ts` and `saved-preview-service.ts` isolate runtime effects behind explicit seams.
+- **Pure helper extraction**: anchor resolution, target normalization, layout normalization, and effect helpers are separated from input/event wiring.
+- **Diagnostics as state**: confidence degradation (fallback anchors, unstable anchors, partial apply) is represented as diagnostics rather than hidden logs.
 - **Behavior-preserving verification**: characterization tests plus `bun run typecheck` and `bun run build` gates were run to validate parity.
 
 ## File Naming Convention

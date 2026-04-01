@@ -50,6 +50,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/chrome": "^0.1.38",
+    "@types/node": "^25.5.0",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@types/three": "^0.183.1",
