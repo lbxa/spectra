@@ -4,11 +4,18 @@ import {
   clampBoundsToVisibleViewport as clampToVisibleViewport,
   clearDocumentSelection as clearSelectionRanges,
   installCaptureInteractionGuards as installSelectionGuards,
-  resolveParentTarget as resolveSelectionParentTarget,
   resolveSelectedTarget as resolveSelectionTarget,
   waitForPostCleanupPaint as waitForCleanupPaint
 } from "./content/capture/selection-runtime";
 import { createPickerUi, type PickerUiApi } from "./content/picker-ui/PickerUiRoot";
+import {
+  createShortcutsHud,
+  type ShortcutsHudApi
+} from "./content/picker-ui/ShortcutsHud";
+import { playExtensionSound } from "./content/extension-audio";
+import { createInteractionController } from "./content/targeting/interaction-controller";
+import { applyRectLayerBounds, createRectLayer } from "./content/targeting/rect-layer";
+import { syncParentOutlineForTarget } from "./content/targeting/parent-outline";
 import type {
   Bounds,
   SaveComponentMessage,
@@ -22,6 +29,7 @@ type SelectionState = {
   overlay: HTMLDivElement;
   parentOverlay: HTMLDivElement;
   ui: PickerUiApi;
+  shortcutsHud: ShortcutsHudApi;
   lastHoveredElement: Element | null;
   isDone: boolean;
 };
@@ -41,11 +49,14 @@ type PickerWindow = Window & {
 
   const overlay = createOverlay();
   const parentOverlay = createParentOverlay();
-  const ui = createPickerUi();
+  const ui = createPickerUi({ shortcutsEnabled: false });
+  const shortcutsHud = createShortcutsHud();
+  shortcutsHud.setVisible(true);
   const state: SelectionState = {
     overlay,
     parentOverlay,
     ui,
+    shortcutsHud,
     lastHoveredElement: null,
     isDone: false
   };
@@ -53,46 +64,42 @@ type PickerWindow = Window & {
   pickerWindow[globalKey] = state;
   document.documentElement.appendChild(overlay);
   document.documentElement.appendChild(parentOverlay);
-  const teardownCaptureInteractionGuards = installCaptureInteractionGuards(() => state.isDone);
-
-  document.addEventListener("mousemove", onMouseMove, true);
-  document.addEventListener("click", onClick, true);
-  document.addEventListener("keydown", onKeyDown, true);
-  document.addEventListener("keyup", onKeyUp, true);
-
-  function onMouseMove(event: MouseEvent): void {
-    if (state.isDone) {
-      return;
+  const interactionController = createInteractionController({
+    isActive: () => !state.isDone,
+    installGuards: installCaptureInteractionGuards,
+    onHover: (_event, target, context) => {
+      state.lastHoveredElement = target;
+      updateOverlay(target.getBoundingClientRect());
+      updateParentOverlayForTarget(target, context.isShiftHeld);
+    },
+    onCommit: (event, target, context) => {
+      void handleCommit(event, target, context.isShiftHeld);
+    },
+    onCancel: () => {
+      state.isDone = true;
+      cleanup();
+      state.ui.showToast("Capture cancelled");
+      state.ui.destroyAfter(2500);
+    },
+    onModifierChange: ({ isShiftHeld }) => {
+      refreshParentOverlay(isShiftHeld);
+      state.shortcutsHud.setShiftActive(isShiftHeld);
     }
-    const target = event.target;
-    if (!(target instanceof Element)) {
-      return;
-    }
+  });
+  interactionController.start();
+
+  async function handleCommit(event: MouseEvent, target: Element, isShiftHeld: boolean): Promise<void> {
     state.lastHoveredElement = target;
-    updateOverlay(target.getBoundingClientRect());
-    updateParentOverlayForTarget(target, event.shiftKey);
-  }
-
-  async function onClick(event: MouseEvent): Promise<void> {
-    if (state.isDone) {
-      return;
-    }
-
-    const target = event.target;
-    if (!(target instanceof Element)) {
-      return;
-    }
-
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    void playSound("click.wav");
+    void playExtensionSound("click.wav");
 
     state.isDone = true;
     cleanup();
     await waitForPostCleanupPaint();
 
-    const selectedTarget = resolveSelectedTarget(target, event.shiftKey);
+    const selectedTarget = resolveSelectedTarget(target, isShiftHeld);
     clearDocumentSelection();
     const rect = selectedTarget.getBoundingClientRect();
     const captureBounds = clampBoundsToVisibleViewport(rect);
@@ -117,7 +124,7 @@ type PickerWindow = Window & {
         type: "SAVE_COMPONENT",
         payload
       } satisfies SaveComponentMessage);
-      void playSound("jingle.wav");
+      void playExtensionSound("jingle.wav");
       const response = (await saveRequest) as SaveComponentResponse;
 
       if (!response?.ok) {
@@ -131,69 +138,26 @@ type PickerWindow = Window & {
       state.ui.destroyAfter(4000);
     } catch (error) {
       console.error("Failed to capture component:", error);
-      void playSound("error.wav");
+      void playExtensionSound("error.wav");
       state.ui.showToast(getCaptureFailureMessage(error));
       state.ui.destroyAfter(2500);
     }
   }
 
-  function onKeyDown(event: KeyboardEvent): void {
-    if (event.key === "Escape") {
-      state.isDone = true;
-      cleanup();
-      state.ui.showToast("Capture cancelled");
-      state.ui.destroyAfter(2500);
-      return;
-    }
-    if (event.key === "Shift") {
-      refreshParentOverlay(true);
-      state.ui.setShiftActive(true);
-    }
-  }
-
-  function onKeyUp(event: KeyboardEvent): void {
-    if (event.key === "Shift") {
-      refreshParentOverlay(false);
-      state.ui.setShiftActive(false);
-    }
-  }
-
   function cleanup(): void {
-    document.removeEventListener("mousemove", onMouseMove, true);
-    document.removeEventListener("click", onClick, true);
-    document.removeEventListener("keydown", onKeyDown, true);
-    document.removeEventListener("keyup", onKeyUp, true);
-    teardownCaptureInteractionGuards();
+    interactionController.stop();
     overlay.remove();
     parentOverlay.remove();
-    state.ui.setShortcutsVisible(false);
+    state.shortcutsHud.destroy();
     delete pickerWindow[globalKey];
   }
 
   function updateOverlay(rect: DOMRect): void {
-    overlay.style.display = "block";
-    overlay.style.left = `${Math.max(0, rect.left)}px`;
-    overlay.style.top = `${Math.max(0, rect.top)}px`;
-    overlay.style.width = `${Math.max(0, rect.width)}px`;
-    overlay.style.height = `${Math.max(0, rect.height)}px`;
+    applyRectLayerBounds(overlay, rect, { minWidth: 0, minHeight: 0 });
   }
 
   function updateParentOverlayForTarget(target: Element, isShiftHeld: boolean): void {
-    if (!isShiftHeld) {
-      parentOverlay.style.display = "none";
-      return;
-    }
-    const parentTarget = resolveParentTarget(target);
-    if (!parentTarget) {
-      parentOverlay.style.display = "none";
-      return;
-    }
-    const rect = parentTarget.getBoundingClientRect();
-    parentOverlay.style.display = "block";
-    parentOverlay.style.left = `${Math.max(0, rect.left)}px`;
-    parentOverlay.style.top = `${Math.max(0, rect.top)}px`;
-    parentOverlay.style.width = `${Math.max(0, rect.width)}px`;
-    parentOverlay.style.height = `${Math.max(0, rect.height)}px`;
+    syncParentOutlineForTarget(parentOverlay, target, isShiftHeld);
   }
 
   function refreshParentOverlay(isShiftHeld: boolean): void {
@@ -207,10 +171,6 @@ type PickerWindow = Window & {
 
 function resolveSelectedTarget(target: Element, isShiftHeld: boolean): Element {
   return resolveSelectionTarget(target, isShiftHeld);
-}
-
-function resolveParentTarget(target: Element): Element | null {
-  return resolveSelectionParentTarget(target);
 }
 
 function installCaptureInteractionGuards(isDone: () => boolean): () => void {
@@ -237,48 +197,25 @@ function computeLocalHostSignature(element: Element): SaveComponentPayload["sour
 }
 
 function createOverlay(): HTMLDivElement {
-  const overlay = document.createElement("div");
+  const overlay = createRectLayer({
+    border: "2px solid #2563eb",
+    background: "rgba(37, 99, 235, 0.12)",
+    borderRadius: "4px",
+    zIndex: "2147483647"
+  });
   overlay.setAttribute("data-component-picker-overlay", "true");
-  overlay.style.position = "fixed";
-  overlay.style.pointerEvents = "none";
-  overlay.style.zIndex = "2147483647";
-  overlay.style.border = "2px solid #2563eb";
-  overlay.style.background = "rgba(37, 99, 235, 0.12)";
-  overlay.style.borderRadius = "4px";
-  overlay.style.boxSizing = "border-box";
-  overlay.style.transition = "all 0.03s linear";
-  overlay.style.display = "none";
   return overlay;
 }
 
 function createParentOverlay(): HTMLDivElement {
-  const overlay = document.createElement("div");
+  const overlay = createRectLayer({
+    border: "2px solid #d946ef",
+    background: "rgba(217, 70, 239, 0.1)",
+    borderRadius: "4px",
+    zIndex: "2147483646"
+  });
   overlay.setAttribute("data-component-picker-parent-overlay", "true");
-  overlay.style.position = "fixed";
-  overlay.style.pointerEvents = "none";
-  overlay.style.zIndex = "2147483646";
-  overlay.style.border = "2px solid #d946ef";
-  overlay.style.background = "rgba(217, 70, 239, 0.1)";
-  overlay.style.borderRadius = "4px";
-  overlay.style.boxSizing = "border-box";
-  overlay.style.transition = "all 0.03s linear";
-  overlay.style.display = "none";
   return overlay;
-}
-
-async function playSound(fileName: "click.wav" | "jingle.wav" | "error.wav"): Promise<void> {
-  const runtime = globalThis.chrome?.runtime;
-  if (!runtime || typeof runtime.getURL !== "function") {
-    return;
-  }
-
-  try {
-    const audio = new Audio(runtime.getURL(`audio/${fileName}`));
-    audio.volume = 0.5;
-    await audio.play();
-  } catch {
-    // Ignore blocked autoplay and missing codec failures.
-  }
 }
 
 async function sendRuntimeMessage(message: SaveComponentMessage): Promise<unknown> {

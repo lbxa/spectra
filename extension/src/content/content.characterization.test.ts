@@ -51,7 +51,7 @@ function removeRuntimeArtifacts(): void {
     "[data-component-picker-ui-root='true']",
     "[data-component-picker-overlay='true']",
     "[data-component-picker-parent-overlay='true']",
-    "[data-component-picker-shortcuts='true']",
+    "[data-spectra-shortcuts-hud-root='true']",
     "[data-component-picker-toast='true']",
     "[data-component-picker-flash='true']",
     "[data-component-picker-capture-preview='true']"

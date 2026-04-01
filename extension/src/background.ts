@@ -1,6 +1,10 @@
 import {
+  type ApplySavedPreviewOnTabResponse,
   isIncomingRuntimeMessage,
   isPreviewStatusMessage,
+  type ApplySavedPreviewResponse,
+  type ListSavedPreviewsForPageResponse,
+  type SavePreviewSceneResponse,
   type SaveComponentPayload,
   type SaveComponentResponse
 } from "./lib/library/messages";
@@ -10,7 +14,14 @@ import { libraryRepository } from "./lib/library/repository";
 import { INBOX_COLLECTION_ID, type SavedComponent } from "./lib/library/types";
 import { injectCaptureRuntime } from "./background/injector";
 import { generateCapturePreview, processComponentThumbnail } from "./background/image-processing";
-import { handlePreviewStatus, handleStartPreview } from "./background/message-router";
+import {
+  handleApplySavedPreview,
+  handleApplySavedPreviewOnTab,
+  handleListSavedPreviewsForPage,
+  handlePreviewStatus,
+  handleSavePreviewScene,
+  handleStartPreview
+} from "./background/message-router";
 import {
   clearCaptureTargetCollectionId,
   clearPreviewSession,
@@ -76,6 +87,55 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
           ok: false,
           error: error instanceof Error ? error.message : "Unable to start preview"
         } satisfies SaveComponentResponse);
+      });
+    return true;
+  }
+
+  if (message.type === "SAVE_PREVIEW_SCENE") {
+    handleSavePreviewScene(message)
+      .then((response) => sendResponse(response satisfies SavePreviewSceneResponse))
+      .catch((error: unknown) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Unable to save preview scene"
+        } satisfies SavePreviewSceneResponse);
+      });
+    return true;
+  }
+
+  if (message.type === "LIST_SAVED_PREVIEWS_FOR_PAGE") {
+    handleListSavedPreviewsForPage(message)
+      .then((response) => sendResponse(response satisfies ListSavedPreviewsForPageResponse))
+      .catch((error: unknown) => {
+        sendResponse({
+          ok: false,
+          previews: [],
+          error: error instanceof Error ? error.message : "Unable to list saved previews"
+        } satisfies ListSavedPreviewsForPageResponse);
+      });
+    return true;
+  }
+
+  if (message.type === "APPLY_SAVED_PREVIEW") {
+    handleApplySavedPreview(message)
+      .then((response) => sendResponse(response satisfies ApplySavedPreviewResponse))
+      .catch((error: unknown) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Unable to apply saved preview"
+        } satisfies ApplySavedPreviewResponse);
+      });
+    return true;
+  }
+
+  if (message.type === "APPLY_SAVED_PREVIEW_ON_TAB") {
+    handleApplySavedPreviewOnTab(message)
+      .then((response) => sendResponse(response satisfies ApplySavedPreviewOnTabResponse))
+      .catch((error: unknown) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Unable to apply saved preview on active tab"
+        } satisfies ApplySavedPreviewOnTabResponse);
       });
     return true;
   }

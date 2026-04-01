@@ -1,21 +1,32 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ChromeRuntimeEventPublisher } from "@/lib/events/chrome-runtime-event-publisher";
 import { LibraryApplicationService } from "@/lib/library/application-service";
 import { libraryRepository } from "@/lib/library/repository";
-import type { Collection, SavedComponent } from "@/lib/library/types";
+import type { Collection, SavedComponent, SavedPreview, SavedPreviewListItem } from "@/lib/library/types";
+import { normalizePathname } from "@/lib/preview/pathname";
+import { applySavedPreviewOnActiveTab, listSavedPreviewsForPage } from "./lib/messages";
 import { useCapturePreviewActions } from "./hooks/use-capture-preview-actions";
 import { useLibraryState } from "./hooks/use-library-state";
 import { setSelectedCollectionPreference } from "./lib/library-preferences";
 import { usePopupStore } from "./state/store";
 import { CaptureHeader } from "./components/CaptureHeader";
+import { WorkspaceShell } from "./components/WorkspaceShell";
 import { CollectionRail } from "./components/library/CollectionRail";
 import { LibraryGrid } from "./components/library/LibraryGrid";
+import { PreviewCanvas } from "./components/previews/PreviewCanvas";
+import { PreviewsSidebar } from "./components/previews/PreviewsSidebar";
 
 const libraryApplicationService = new LibraryApplicationService(libraryRepository, new ChromeRuntimeEventPublisher());
 
 export function App() {
+  const [previews, setPreviews] = useState<SavedPreviewListItem[]>([]);
+  const [activePreviewPageKey, setActivePreviewPageKey] = useState<string | null>(null);
+  const [selectedPreview, setSelectedPreview] = useState<SavedPreview | null>(null);
+  const [previewComponentsById, setPreviewComponentsById] = useState<Map<string, SavedComponent>>(new Map());
+  const [isPreviewApplyPending, setIsPreviewApplyPending] = useState(false);
   const selectedCollectionId = usePopupStore((state) => state.selectedCollectionId);
   const selectedComponentId = usePopupStore((state) => state.selectedComponentId);
+  const activeSpace = usePopupStore((state) => state.activeSpace);
   const hasHydrated = usePopupStore((state) => state.hasHydrated);
   const hydrateStatus = usePopupStore((state) => state.hydrateStatus);
   const openCollection = usePopupStore((state) => state.openCollection);
@@ -26,6 +37,15 @@ export function App() {
   const removeComponent = usePopupStore((state) => state.removeComponent);
   const removeCollection = usePopupStore((state) => state.removeCollection);
   const validateRestoredView = usePopupStore((state) => state.validateRestoredView);
+  const setActiveSpace = usePopupStore((state) => state.setActiveSpace);
+  const lastVisitedPreviewByPageKey = usePopupStore((state) => state.lastVisitedPreviewByPageKey);
+  const setLastVisitedPreview = usePopupStore((state) => state.setLastVisitedPreview);
+  const clearLastVisitedPreview = usePopupStore((state) => state.clearLastVisitedPreview);
+  const getLastVisitedPreview = usePopupStore((state) => state.getLastVisitedPreview);
+
+  const selectedPreviewId = activePreviewPageKey
+    ? (lastVisitedPreviewByPageKey[activePreviewPageKey] ?? null)
+    : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -69,6 +89,106 @@ export function App() {
       libraryStateSelectedCollectionId: libraryState.selectedCollectionId,
       setStatusMessage
     });
+
+  useEffect(() => {
+    if (activeSpace !== "previews") {
+      return;
+    }
+    let cancelled = false;
+    const loadPreviews = async (): Promise<void> => {
+      try {
+        const pageTarget = await resolveActiveTabTarget();
+        if (!pageTarget) {
+          if (!cancelled) {
+            setActivePreviewPageKey(null);
+            setPreviews([]);
+            setSelectedPreview(null);
+            setPreviewComponentsById(new Map());
+          }
+          return;
+        }
+        const pageKey = toPreviewPageKey(pageTarget);
+        const response = await listSavedPreviewsForPage(pageTarget.origin, pageTarget.pathname);
+        if (cancelled) {
+          return;
+        }
+        setActivePreviewPageKey(pageKey);
+        setPreviews(response.previews);
+        const lastVisitedPreviewId = getLastVisitedPreview(pageKey);
+        const resolvedSelectedPreviewId = lastVisitedPreviewId && response.previews.some((preview) => preview.id === lastVisitedPreviewId)
+          ? lastVisitedPreviewId
+          : (response.previews[0]?.id ?? null);
+
+        if (resolvedSelectedPreviewId) {
+          setLastVisitedPreview(pageKey, resolvedSelectedPreviewId);
+        } else {
+          clearLastVisitedPreview(pageKey);
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        console.error("Failed to load saved previews:", error);
+        setStatusMessage(error instanceof Error ? error.message : "Could not load saved previews");
+        setPreviews([]);
+      }
+    };
+
+    void loadPreviews();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSpace, clearLastVisitedPreview, getLastVisitedPreview, setLastVisitedPreview, setStatusMessage]);
+
+  useEffect(() => {
+    if (activeSpace !== "previews" || !selectedPreviewId) {
+      setSelectedPreview(null);
+      setPreviewComponentsById(new Map());
+      return;
+    }
+    let cancelled = false;
+    const loadSelectedPreview = async (): Promise<void> => {
+      try {
+        await libraryRepository.initLibrary();
+        const preview = await libraryRepository.getSavedPreview(selectedPreviewId);
+        if (cancelled) {
+          return;
+        }
+        if (!preview) {
+          setSelectedPreview(null);
+          setPreviewComponentsById(new Map());
+          return;
+        }
+        const components = await Promise.all(
+          preview.instances.map(async (instance) => libraryRepository.getComponent(instance.componentId))
+        );
+        if (cancelled) {
+          return;
+        }
+        setSelectedPreview(preview);
+        setPreviewComponentsById(
+          new Map(
+            components
+              .filter((component): component is SavedComponent => component !== null)
+              .map((component) => [component.id, component] as const)
+          )
+        );
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        console.error("Failed to hydrate selected saved preview:", error);
+        setStatusMessage(error instanceof Error ? error.message : "Could not load preview details");
+        setSelectedPreview(null);
+        setPreviewComponentsById(new Map());
+      }
+    };
+
+    void loadSelectedPreview();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSpace, selectedPreviewId, setStatusMessage]);
 
   const handleSelectCollection = async (collectionId: string): Promise<void> => {
     setLibraryState((current) => ({
@@ -254,6 +374,30 @@ export function App() {
     }
   };
 
+  const handleApplySavedPreview = async (): Promise<void> => {
+    if (!selectedPreviewId) {
+      return;
+    }
+    setIsPreviewApplyPending(true);
+    try {
+      await applySavedPreviewOnActiveTab(selectedPreviewId);
+      setStatusMessage("Applied saved preview on active tab");
+      window.close();
+    } catch (error) {
+      console.error("Failed to apply saved preview:", error);
+      setStatusMessage(error instanceof Error ? error.message : "Could not apply saved preview");
+    } finally {
+      setIsPreviewApplyPending(false);
+    }
+  };
+
+  const handleSelectPreview = (previewId: string): void => {
+    if (!activePreviewPageKey) {
+      return;
+    }
+    setLastVisitedPreview(activePreviewPageKey, previewId);
+  };
+
   const effectiveSelectedCollectionId = selectedCollectionId ?? libraryState.selectedCollectionId;
   const selectedCollection =
     libraryState.collections.find((collection) => collection.id === effectiveSelectedCollectionId) ?? null;
@@ -264,7 +408,6 @@ export function App() {
   const activeComponent = selectedComponentId
     ? getComponentById(libraryState.componentsByCollectionId, selectedComponentId)
     : null;
-
   const isHydratingPopupState = !hasHydrated || hydrateStatus === "hydrating";
   if (isHydratingPopupState) {
     return (
@@ -289,61 +432,88 @@ export function App() {
         isCaptureDisabled={!isCaptureAvailable || isCaptureStarting}
         onStartCapture={handleCaptureStart}
         statusMessage={statusMessage}
+        activeSpace={activeSpace}
+        onActiveSpaceChange={setActiveSpace}
       />
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <CollectionRail
-          collections={libraryState.collections}
-          selectedCollectionId={effectiveSelectedCollectionId}
-          componentCounts={componentCounts}
-          onSelectCollection={(collectionId) => {
-            void handleSelectCollection(collectionId);
-          }}
-          onDeleteCollection={(collectionId) => {
-            void handleDeleteCollection(collectionId);
-          }}
-          onCreateCollection={async (input) => {
-            await handleCreateCollection(input);
-          }}
-          onUpdateCollection={async (collectionId, patch) => {
-            await handleUpdateCollection(collectionId, patch);
-          }}
+      {activeSpace === "library" ? (
+        <WorkspaceShell
+          sidebar={
+            <CollectionRail
+              collections={libraryState.collections}
+              selectedCollectionId={effectiveSelectedCollectionId}
+              componentCounts={componentCounts}
+              onSelectCollection={(collectionId) => {
+                void handleSelectCollection(collectionId);
+              }}
+              onDeleteCollection={(collectionId) => {
+                void handleDeleteCollection(collectionId);
+              }}
+              onCreateCollection={async (input) => {
+                await handleCreateCollection(input);
+              }}
+              onUpdateCollection={async (collectionId, patch) => {
+                await handleUpdateCollection(collectionId, patch);
+              }}
+            />
+          }
+          stage={
+            <LibraryGrid
+              collection={selectedCollection}
+              collections={libraryState.collections}
+              components={selectedComponents}
+              activeCollectionId={effectiveSelectedCollectionId}
+              activeComponent={activeComponent}
+              isPreviewStarting={isPreviewStarting}
+              onStartPreview={(component, activeCollectionId) => {
+                void handlePreviewStart(component, activeCollectionId);
+              }}
+              onOpenDetails={(componentId) => {
+                const activeCollectionId = effectiveSelectedCollectionId;
+                if (!activeCollectionId) {
+                  return;
+                }
+                openComponentCanvas(activeCollectionId, componentId);
+              }}
+              onCloseDetails={() => {
+                closeComponentCanvas();
+              }}
+              onCopyComponentToCollection={(componentId, targetCollectionId) => {
+                void handleCopyComponentToCollection(componentId, targetCollectionId);
+              }}
+              onMoveComponentToCollection={(componentId, sourceCollectionId, targetCollectionId) => {
+                void handleMoveComponentToCollection(componentId, sourceCollectionId, targetCollectionId);
+              }}
+              onDeleteComponent={(componentId) => {
+                void handleDeleteComponent(componentId);
+              }}
+              onDeleteCollection={(collectionId) => {
+                void handleDeleteCollection(collectionId);
+              }}
+            />
+          }
         />
-
-        <LibraryGrid
-          collection={selectedCollection}
-          collections={libraryState.collections}
-          components={selectedComponents}
-          activeCollectionId={effectiveSelectedCollectionId}
-          activeComponent={activeComponent}
-          isPreviewStarting={isPreviewStarting}
-          onStartPreview={(component, activeCollectionId) => {
-            void handlePreviewStart(component, activeCollectionId);
-          }}
-          onOpenDetails={(componentId) => {
-            const activeCollectionId = effectiveSelectedCollectionId;
-            if (!activeCollectionId) {
-              return;
-            }
-            openComponentCanvas(activeCollectionId, componentId);
-          }}
-          onCloseDetails={() => {
-            closeComponentCanvas();
-          }}
-          onCopyComponentToCollection={(componentId, targetCollectionId) => {
-            void handleCopyComponentToCollection(componentId, targetCollectionId);
-          }}
-          onMoveComponentToCollection={(componentId, sourceCollectionId, targetCollectionId) => {
-            void handleMoveComponentToCollection(componentId, sourceCollectionId, targetCollectionId);
-          }}
-          onDeleteComponent={(componentId) => {
-            void handleDeleteComponent(componentId);
-          }}
-          onDeleteCollection={(collectionId) => {
-            void handleDeleteCollection(collectionId);
-          }}
+      ) : (
+        <WorkspaceShell
+          sidebar={
+            <PreviewsSidebar
+              previews={previews}
+              selectedPreviewId={selectedPreview?.id ?? selectedPreviewId}
+              onSelectPreview={handleSelectPreview}
+            />
+          }
+          stage={
+            <PreviewCanvas
+              preview={selectedPreview}
+              componentsById={previewComponentsById}
+              isApplyDisabled={isPreviewApplyPending}
+              onApplyPreview={() => {
+                void handleApplySavedPreview();
+              }}
+            />
+          }
         />
-      </div>
+      )}
     </main>
   );
 }
@@ -468,3 +638,24 @@ function getComponentById(
   }
   return null;
 }
+
+async function resolveActiveTabTarget(): Promise<{ origin: string; pathname: string } | null> {
+  const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (!activeTab?.url) {
+    return null;
+  }
+  try {
+    const parsed = new URL(activeTab.url);
+    return {
+      origin: parsed.origin,
+      pathname: normalizePathname(parsed.pathname)
+    };
+  } catch {
+    return null;
+  }
+}
+
+function toPreviewPageKey(target: { origin: string; pathname: string }): string {
+  return `${target.origin}${target.pathname}`;
+}
+

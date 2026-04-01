@@ -1,19 +1,32 @@
 import { Button } from "@/components/ui/button";
 import { Orb } from "./Orb";
+import { SpaceSelect, type PopupSpace } from "./SpaceSelect";
 
 type CaptureHeaderProps = {
   isCaptureDisabled: boolean;
   onStartCapture: () => Promise<void>;
   statusMessage: string;
+  activeSpace: PopupSpace;
+  onActiveSpaceChange: (space: PopupSpace) => void;
 };
 
-export function CaptureHeader({ isCaptureDisabled, onStartCapture, statusMessage }: CaptureHeaderProps) {
+export function CaptureHeader({
+  isCaptureDisabled,
+  onStartCapture,
+  statusMessage,
+  activeSpace,
+  onActiveSpaceChange
+}: CaptureHeaderProps) {
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between gap-1.5 border-b border-border bg-background p-2">
       <div className="flex min-w-0 items-center gap-2">
         <Orb />
         <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold tracking-tight text-foreground">Spectra Library</h1>
+          <div className="flex items-baseline gap-1">
+            <h1 className="text-sm font-semibold tracking-tight text-muted-foreground">Spectra</h1>
+            <span className="text-sm text-muted-foreground/60 pl-1">/</span>
+            <SpaceSelect value={activeSpace} onValueChange={onActiveSpaceChange} />
+          </div>
           {statusMessage ? (
             <p className="mt-0.5 text-[11px] text-muted-foreground">
               {statusMessage}

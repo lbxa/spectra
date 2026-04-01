@@ -1,15 +1,19 @@
 import type { Collection, SavedComponent } from "@/lib/library/types";
 import { describe, expect, it } from "vitest";
 import { createStore } from "zustand/vanilla";
+import { createAppSlice } from "./app-slice";
 import {
   createCollectionSlice,
   initialCollectionSliceState,
   type PopupStore
 } from "./collection-slice";
+import { createPreviewsSlice } from "./previews-slice";
 
 function createTestStore() {
   return createStore<PopupStore>()((...args) => ({
-    ...createCollectionSlice(...args)
+    ...createAppSlice(...args),
+    ...createCollectionSlice(...args),
+    ...createPreviewsSlice(...args)
   }));
 }
 

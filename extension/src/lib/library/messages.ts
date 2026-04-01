@@ -1,4 +1,11 @@
-import type { Collection, HostSignature, SavedComponent } from "./types";
+import type {
+  Collection,
+  HostSignature,
+  SavedComponent,
+  SavedPreview,
+  SavedPreviewApplyResult,
+  SavedPreviewListItem
+} from "./types";
 
 export type Bounds = {
   left: number;
@@ -49,6 +56,33 @@ export type StartPreviewMessage = {
   component: SavedComponent;
 };
 
+export type SavePreviewSceneMessage = {
+  type: "SAVE_PREVIEW_SCENE";
+  payload: SavedPreview;
+};
+
+export type ListSavedPreviewsForPageMessage = {
+  type: "LIST_SAVED_PREVIEWS_FOR_PAGE";
+  payload: {
+    origin: string;
+    pathname: string;
+  };
+};
+
+export type ApplySavedPreviewMessage = {
+  type: "APPLY_SAVED_PREVIEW";
+  payload: {
+    previewId: string;
+  };
+};
+
+export type ApplySavedPreviewOnTabMessage = {
+  type: "APPLY_SAVED_PREVIEW_ON_TAB";
+  payload: {
+    previewId: string;
+  };
+};
+
 export type BeginTargetingMessage = {
   type: "BEGIN_TARGETING";
   component: SavedComponent;
@@ -82,6 +116,31 @@ export type PreviewStatusMessage =
   | PreviewRemovedMessage
   | PreviewErrorMessage;
 
+export type SavePreviewSceneResponse = {
+  ok: boolean;
+  preview?: SavedPreview;
+  error?: string;
+};
+
+export type ListSavedPreviewsForPageResponse = {
+  ok: boolean;
+  previews: SavedPreviewListItem[];
+  error?: string;
+};
+
+export type ApplySavedPreviewResponse = {
+  ok: boolean;
+  preview?: SavedPreview;
+  components?: SavedComponent[];
+  results?: SavedPreviewApplyResult[];
+  error?: string;
+};
+
+export type ApplySavedPreviewOnTabResponse = {
+  ok: boolean;
+  error?: string;
+};
+
 export type LibraryEventType =
   | "COMPONENT_SAVED"
   | "COLLECTION_CREATED"
@@ -101,7 +160,15 @@ export type LibraryUpdatedMessage = {
   };
 };
 
-export type IncomingRuntimeMessage = StartCaptureMessage | SaveComponentMessage | StartPreviewMessage | PreviewStatusMessage;
+export type IncomingRuntimeMessage =
+  | StartCaptureMessage
+  | SaveComponentMessage
+  | StartPreviewMessage
+  | SavePreviewSceneMessage
+  | ListSavedPreviewsForPageMessage
+  | ApplySavedPreviewMessage
+  | ApplySavedPreviewOnTabMessage
+  | PreviewStatusMessage;
 
 export function isIncomingRuntimeMessage(message: unknown): message is IncomingRuntimeMessage {
   if (!message || typeof message !== "object") {
@@ -126,6 +193,22 @@ export function isIncomingRuntimeMessage(message: unknown): message is IncomingR
       "activeCollectionId" in message &&
       typeof message.activeCollectionId === "string"
     );
+  }
+
+  if (message.type === "SAVE_PREVIEW_SCENE") {
+    return "payload" in message;
+  }
+
+  if (message.type === "LIST_SAVED_PREVIEWS_FOR_PAGE") {
+    return "payload" in message;
+  }
+
+  if (message.type === "APPLY_SAVED_PREVIEW") {
+    return "payload" in message;
+  }
+
+  if (message.type === "APPLY_SAVED_PREVIEW_ON_TAB") {
+    return "payload" in message;
   }
 
   return (

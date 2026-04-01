@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Collection } from "@/lib/library/types";
 import { useEffect, useRef } from "react";
+import { SidebarCard } from "../SidebarCard";
 
 type CollectionCardProps = {
   collection: Collection;
@@ -61,26 +62,7 @@ export function CollectionCard({
     <li className="group w-full cursor-pointer">
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={onSelect}
-            onKeyDown={(event) => {
-              if (event.target !== event.currentTarget) {
-                return;
-              }
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                onSelect();
-              }
-            }}
-            className={cn(
-              "flex w-full items-start justify-between gap-1.5 rounded-md border p-1 text-left transition-colors",
-              isSelected
-                ? "border-primary bg-primary text-background"
-                : "border-border bg-background text-foreground hover:bg-surface"
-            )}
-          >
+          <SidebarCard isSelected={isSelected} onClick={onSelect}>
             <span className="grid min-w-0 flex-1 gap-1">
               <input
                 ref={nameInputRef}
@@ -155,7 +137,7 @@ export function CollectionCard({
                 {count}
               </Badge>
             </div>
-          </div>
+          </SidebarCard>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-menu-w">
           <ContextMenuItem onSelect={onSelect}>Select</ContextMenuItem>
