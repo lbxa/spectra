@@ -7,13 +7,28 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { AlignCenterVertical, AlignEndVertical, AlignStartVertical, Check, ChevronDown, Crosshair, MoveHorizontal, Undo2 } from "lucide-react";
+import {
+  AlignCenterVertical,
+  AlignEndVertical,
+  AlignStartVertical,
+  Check,
+  ChevronDown,
+  Crosshair,
+  MoveHorizontal,
+  Sparkles,
+  Undo2
+} from "lucide-react";
+import { cn } from "../lib/utils";
+
+export type MagicButtonState = "idle" | "loading" | "success" | "error";
 
 type PreviewToolbarProps = {
   relation: InsertionRelation;
   alignment: PreviewAlignment;
   onUndo: () => void;
   onRetarget: () => void;
+  onMagic: () => void;
+  magicState?: MagicButtonState;
   onRelationChange: (relation: InsertionRelation) => void;
   onAlignmentChange: (alignment: PreviewAlignment) => void;
 };
@@ -39,9 +54,13 @@ export function PreviewToolbar({
   alignment,
   onUndo,
   onRetarget,
+  onMagic,
+  magicState = "idle",
   onRelationChange,
   onAlignmentChange
 }: PreviewToolbarProps) {
+  const isMagicBusy = magicState === "loading";
+
   return (
     <div className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(148,163,184,0.28)] bg-[rgba(17,24,39,0.95)] p-1.5 font-sans text-[11px] leading-none text-slate-50 shadow-[0_10px_22px_rgba(0,0,0,0.25)]">
       <Button
@@ -66,6 +85,7 @@ export function PreviewToolbar({
       >
         <Crosshair size={12} strokeWidth={2} aria-hidden="true" className="shrink-0" />
       </Button>
+     
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -133,6 +153,23 @@ export function PreviewToolbar({
           );
         })}
       </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-label="Magic adapt"
+        title={isMagicBusy ? "Adapting..." : "Magic adapt"}
+        disabled={isMagicBusy}
+        className={cn(
+          "h-6 w-7 cursor-pointer rounded-md border-[rgba(148,163,184,0.4)] bg-[rgba(15,23,42,1)] p-0 text-slate-50 transition-colors hover:bg-[rgba(30,41,59,1)] hover:text-slate-50 focus-visible:ring-2 focus-visible:ring-[rgba(148,163,184,0.5)]",
+          isMagicBusy && "cursor-not-allowed opacity-70",
+          magicState === "success" && "border-emerald-400/70 text-emerald-200",
+          magicState === "error" && "border-rose-400/70 text-rose-200"
+        )}
+        onClick={onMagic}
+      >
+        <Sparkles size={12} strokeWidth={2} aria-hidden="true" className={cn("shrink-0", isMagicBusy && "animate-pulse")} />
+      </Button>
     </div>
   );
 }

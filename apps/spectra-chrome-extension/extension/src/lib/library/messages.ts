@@ -38,6 +38,7 @@ export type SaveComponentResponse = {
   ok: boolean;
   error?: string;
   previewDataUrl?: string;
+  component?: SavedComponent;
 };
 
 export type WorkerSessionState = "idle" | "starting" | "active" | "closed" | "error";
@@ -54,6 +55,93 @@ export type StartPreviewMessage = {
   type: "START_PREVIEW";
   activeCollectionId: string;
   component: SavedComponent;
+};
+
+export type ThemeTokenMap = Record<string, string>;
+
+export type NativeExemplarStyle = {
+  role: string;
+  cssText: string;
+};
+
+export type TargetSiteContext = {
+  globalThemeTokens: ThemeTokenMap;
+  insertionContext: {
+    hostTag: string;
+    hostClasses: string[];
+    nearbyHeading?: string;
+    computedDisplay?: string;
+    computedColor?: string;
+    computedBackgroundColor?: string;
+  };
+  nativeExemplars: NativeExemplarStyle[];
+  hardConstraints: {
+    maxOverrideCssChars: number;
+    protectedNodeIds: string[];
+  };
+  metadata: {
+    pageUrl: string;
+    pageTitle: string;
+    themeFingerprint: string;
+  };
+};
+
+export type ComponentPack = {
+  normalizedHtml: string;
+  baseCss: string;
+  stableNodeIds: string[];
+  semanticRoleHint: string;
+  protectedNodeIds: string[];
+  wrapperRootId: string;
+};
+
+export type AdaptRequest = {
+  targetSiteContext: TargetSiteContext;
+  componentPack: ComponentPack;
+};
+
+export type AdaptationPatch = {
+  strategy: "css_override";
+  summary: string;
+  overrideCss: string;
+  attributeEdits: Array<{
+    nodeId: string;
+    name: string;
+    value: string;
+  }>;
+  preservedNodeIds: string[];
+  confidence: number;
+  warnings: string[];
+};
+
+export type AdaptComponentMessage = {
+  type: "ADAPT_COMPONENT";
+  payload: AdaptRequest;
+};
+
+export type AdaptComponentResponse = {
+  ok: boolean;
+  patch?: AdaptationPatch;
+  error?: string;
+};
+
+export type SaveDerivedComponentMessage = {
+  type: "SAVE_DERIVED_COMPONENT";
+  payload: {
+    sourceComponentId: string;
+    html: string;
+    cssText: string;
+    summary: string;
+    warnings: string[];
+    confidence: number;
+    themeFingerprint: string;
+  };
+};
+
+export type SaveDerivedComponentResponse = {
+  ok: boolean;
+  component?: SavedComponent;
+  error?: string;
 };
 
 export type SavePreviewSceneMessage = {
@@ -110,11 +198,27 @@ export type PreviewErrorMessage = {
   message: string;
 };
 
+export type MagicStatusMessage = {
+  type:
+    | "MAGIC_CLICKED"
+    | "MAGIC_REQUEST_STARTED"
+    | "MAGIC_REQUEST_SUCCEEDED"
+    | "MAGIC_REQUEST_FAILED"
+    | "MAGIC_PATCH_APPLIED"
+    | "MAGIC_PATCH_REJECTED"
+    | "MAGIC_ADAPTED_REVISION_SAVED";
+  previewId?: string;
+  componentId?: string;
+  code?: string;
+  message?: string;
+};
+
 export type PreviewStatusMessage =
   | PreviewReadyMessage
   | PreviewInsertedMessage
   | PreviewRemovedMessage
-  | PreviewErrorMessage;
+  | PreviewErrorMessage
+  | MagicStatusMessage;
 
 export type SavePreviewSceneResponse = {
   ok: boolean;
@@ -163,7 +267,9 @@ export type LibraryUpdatedMessage = {
 export type IncomingRuntimeMessage =
   | StartCaptureMessage
   | SaveComponentMessage
+  | SaveDerivedComponentMessage
   | StartPreviewMessage
+  | AdaptComponentMessage
   | SavePreviewSceneMessage
   | ListSavedPreviewsForPageMessage
   | ApplySavedPreviewMessage
@@ -195,6 +301,14 @@ export function isIncomingRuntimeMessage(message: unknown): message is IncomingR
     );
   }
 
+  if (message.type === "SAVE_DERIVED_COMPONENT") {
+    return "payload" in message;
+  }
+
+  if (message.type === "ADAPT_COMPONENT") {
+    return "payload" in message;
+  }
+
   if (message.type === "SAVE_PREVIEW_SCENE") {
     return "payload" in message;
   }
@@ -215,7 +329,14 @@ export function isIncomingRuntimeMessage(message: unknown): message is IncomingR
     message.type === "PREVIEW_READY" ||
     message.type === "PREVIEW_INSERTED" ||
     message.type === "PREVIEW_REMOVED" ||
-    message.type === "PREVIEW_ERROR"
+    message.type === "PREVIEW_ERROR" ||
+    message.type === "MAGIC_CLICKED" ||
+    message.type === "MAGIC_REQUEST_STARTED" ||
+    message.type === "MAGIC_REQUEST_SUCCEEDED" ||
+    message.type === "MAGIC_REQUEST_FAILED" ||
+    message.type === "MAGIC_PATCH_APPLIED" ||
+    message.type === "MAGIC_PATCH_REJECTED" ||
+    message.type === "MAGIC_ADAPTED_REVISION_SAVED"
   );
 }
 
@@ -237,6 +358,13 @@ export function isPreviewStatusMessage(message: unknown): message is PreviewStat
     message.type === "PREVIEW_READY" ||
     message.type === "PREVIEW_INSERTED" ||
     message.type === "PREVIEW_REMOVED" ||
-    message.type === "PREVIEW_ERROR"
+    message.type === "PREVIEW_ERROR" ||
+    message.type === "MAGIC_CLICKED" ||
+    message.type === "MAGIC_REQUEST_STARTED" ||
+    message.type === "MAGIC_REQUEST_SUCCEEDED" ||
+    message.type === "MAGIC_REQUEST_FAILED" ||
+    message.type === "MAGIC_PATCH_APPLIED" ||
+    message.type === "MAGIC_PATCH_REJECTED" ||
+    message.type === "MAGIC_ADAPTED_REVISION_SAVED"
   );
 }

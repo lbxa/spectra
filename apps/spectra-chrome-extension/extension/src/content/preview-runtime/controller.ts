@@ -1,4 +1,8 @@
-import { createPreviewSession } from "./preview-session";
+import {
+  createPreviewSession,
+  type PreviewSessionAdaptationDeps,
+  type PreviewSessionMessaging
+} from "./preview-session";
 
 export type PreviewRuntime = {
   teardown: () => void;
@@ -6,6 +10,8 @@ export type PreviewRuntime = {
 
 type PreviewRuntimeOptions = {
   onTeardown?: () => void;
+  messaging?: PreviewSessionMessaging;
+  adaptation?: PreviewSessionAdaptationDeps;
 };
 
 export function createPreviewRuntime(options: PreviewRuntimeOptions = {}): PreviewRuntime {

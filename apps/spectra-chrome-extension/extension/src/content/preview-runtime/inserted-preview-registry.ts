@@ -3,6 +3,7 @@ import type { SavedComponent } from "../../lib/library/types";
 import { watchPreviewRemoval, type PreviewMutationWatcher } from "../mutation-watch";
 import { insertPreview, type InsertedPreview } from "../preview-insert";
 import { createPreviewToolbar, type PreviewToolbarControls } from "../preview-toolbar";
+import type { MagicButtonState } from "../PreviewToolbar";
 
 type RegistryRemovalReason = "manual" | "mutation";
 
@@ -14,12 +15,14 @@ export type InsertedPreviewRecord = {
   component: SavedComponent;
   relation: InsertionRelation;
   alignment: PreviewAlignment;
+  magicState: MagicButtonState;
 };
 
 type InsertedPreviewRegistryDeps = {
   onActivePreviewChanged: (previewId: string | null) => void;
   onPreviewRemoved: (previewId: string, notify: boolean, reason: RegistryRemovalReason) => void;
   onRetargetRequested: (component: SavedComponent) => void;
+  onMagicRequested: (previewId: string, component: SavedComponent) => void;
 };
 
 export type InsertedPreviewRegistry = ReturnType<typeof createInsertedPreviewRegistry>;
@@ -79,6 +82,10 @@ export function createInsertedPreviewRegistry(deps: InsertedPreviewRegistryDeps)
         remove(inserted.previewId);
         deps.onRetargetRequested(component);
       },
+      onMagic: () => {
+        markActive(inserted.previewId);
+        deps.onMagicRequested(inserted.previewId, component);
+      },
       onRelationChange: (nextRelation) => {
         markActive(inserted.previewId);
         replacePlacement(inserted.previewId, nextRelation);
@@ -101,7 +108,8 @@ export function createInsertedPreviewRegistry(deps: InsertedPreviewRegistryDeps)
       host,
       component,
       relation,
-      alignment
+      alignment,
+      magicState: "idle"
     });
     markActive(inserted.previewId);
   };
@@ -122,6 +130,25 @@ export function createInsertedPreviewRegistry(deps: InsertedPreviewRegistryDeps)
     register(inserted, record.host, record.component, relation, alignment);
   };
 
+  const replaceComponent = (previewId: string, nextComponent: SavedComponent): void => {
+    const record = recordsById.get(previewId);
+    if (!record) {
+      return;
+    }
+    remove(previewId, { notify: false });
+    const inserted = insertPreview(record.host, nextComponent, record.relation, record.alignment);
+    register(inserted, record.host, nextComponent, record.relation, record.alignment);
+  };
+
+  const setMagicState = (previewId: string, state: MagicButtonState): void => {
+    const record = recordsById.get(previewId);
+    if (!record) {
+      return;
+    }
+    record.magicState = state;
+    record.toolbar.setMagicState(state);
+  };
+
   const clear = (notify: boolean = true): void => {
     const previewIds = Array.from(recordsById.keys());
     for (const previewId of previewIds) {
@@ -137,6 +164,8 @@ export function createInsertedPreviewRegistry(deps: InsertedPreviewRegistryDeps)
     register,
     remove,
     replacePlacement,
+    replaceComponent,
+    setMagicState,
     clear,
     teardown,
     markActive,

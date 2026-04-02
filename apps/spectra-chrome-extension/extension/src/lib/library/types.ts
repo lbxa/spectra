@@ -40,6 +40,14 @@ export type SavedComponent = {
   screenshotDataUrl: string;
   thumbnailMeta?: ThumbnailMeta;
   sourceHostSignature: HostSignature;
+  derivedFromComponentId?: string;
+  adaptation?: {
+    summary: string;
+    warnings: string[];
+    confidence: number;
+    themeFingerprint: string;
+    adaptedAt: string;
+  };
 };
 
 export type PreviewMatchMode = "exact_path" | "path_prefix";

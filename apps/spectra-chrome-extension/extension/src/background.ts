@@ -1,9 +1,11 @@
 import {
+  type AdaptComponentResponse,
   type ApplySavedPreviewOnTabResponse,
   isIncomingRuntimeMessage,
   isPreviewStatusMessage,
   type ApplySavedPreviewResponse,
   type ListSavedPreviewsForPageResponse,
+  type SaveDerivedComponentResponse,
   type SavePreviewSceneResponse,
   type SaveComponentPayload,
   type SaveComponentResponse
@@ -12,6 +14,7 @@ import { ChromeRuntimeEventPublisher } from "./lib/events/chrome-runtime-event-p
 import { LibraryApplicationService } from "./lib/library/application-service";
 import { libraryRepository } from "./lib/library/repository";
 import { INBOX_COLLECTION_ID, type SavedComponent } from "./lib/library/types";
+import { requestAdaptationFromBackend } from "./background/adapt-client";
 import { injectCaptureRuntime } from "./background/injector";
 import { generateCapturePreview, processComponentThumbnail } from "./background/image-processing";
 import {
@@ -37,10 +40,52 @@ type Bounds = {
   height: number;
 };
 
-const libraryApplicationService = new LibraryApplicationService(
-  libraryRepository,
-  new ChromeRuntimeEventPublisher()
-);
+type BackgroundServices = {
+  repository: typeof libraryRepository;
+  libraryApplicationService: LibraryApplicationService;
+  requestAdaptationFromBackend: typeof requestAdaptationFromBackend;
+  injectCaptureRuntime: typeof injectCaptureRuntime;
+  processComponentThumbnail: typeof processComponentThumbnail;
+  generateCapturePreview: typeof generateCapturePreview;
+  getCaptureTargetCollectionId: typeof getCaptureTargetCollectionId;
+  clearCaptureTargetCollectionId: typeof clearCaptureTargetCollectionId;
+  setCaptureTargetCollectionId: typeof setCaptureTargetCollectionId;
+  requireActiveTab: typeof requireActiveTab;
+  assertCaptureSupportedTab: typeof assertCaptureSupportedTab;
+  messageRouter: {
+    handleStartPreview: typeof handleStartPreview;
+    handleSavePreviewScene: typeof handleSavePreviewScene;
+    handleListSavedPreviewsForPage: typeof handleListSavedPreviewsForPage;
+    handleApplySavedPreview: typeof handleApplySavedPreview;
+    handleApplySavedPreviewOnTab: typeof handleApplySavedPreviewOnTab;
+    handlePreviewStatus: typeof handlePreviewStatus;
+  };
+};
+
+const backgroundServices: BackgroundServices = {
+  repository: libraryRepository,
+  libraryApplicationService: new LibraryApplicationService(
+    libraryRepository,
+    new ChromeRuntimeEventPublisher()
+  ),
+  requestAdaptationFromBackend,
+  injectCaptureRuntime,
+  processComponentThumbnail,
+  generateCapturePreview,
+  getCaptureTargetCollectionId,
+  clearCaptureTargetCollectionId,
+  setCaptureTargetCollectionId,
+  requireActiveTab,
+  assertCaptureSupportedTab,
+  messageRouter: {
+    handleStartPreview,
+    handleSavePreviewScene,
+    handleListSavedPreviewsForPage,
+    handleApplySavedPreview,
+    handleApplySavedPreviewOnTab,
+    handlePreviewStatus
+  }
+};
 
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab || typeof tab.id !== "number") {
@@ -48,7 +93,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 
   try {
-    await injectCaptureRuntime(tab.id);
+    await backgroundServices.injectCaptureRuntime(tab.id);
   } catch (error) {
     console.error("Failed to inject content script from action click:", error);
   }
@@ -80,7 +125,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   }
 
   if (message.type === "START_PREVIEW") {
-    handleStartPreview(message)
+    backgroundServices.messageRouter.handleStartPreview(message)
       .then((response) => sendResponse(response))
       .catch((error: unknown) => {
         sendResponse({
@@ -92,7 +137,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   }
 
   if (message.type === "SAVE_PREVIEW_SCENE") {
-    handleSavePreviewScene(message)
+    backgroundServices.messageRouter.handleSavePreviewScene(message)
       .then((response) => sendResponse(response satisfies SavePreviewSceneResponse))
       .catch((error: unknown) => {
         sendResponse({
@@ -104,7 +149,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   }
 
   if (message.type === "LIST_SAVED_PREVIEWS_FOR_PAGE") {
-    handleListSavedPreviewsForPage(message)
+    backgroundServices.messageRouter.handleListSavedPreviewsForPage(message)
       .then((response) => sendResponse(response satisfies ListSavedPreviewsForPageResponse))
       .catch((error: unknown) => {
         sendResponse({
@@ -117,7 +162,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   }
 
   if (message.type === "APPLY_SAVED_PREVIEW") {
-    handleApplySavedPreview(message)
+    backgroundServices.messageRouter.handleApplySavedPreview(message)
       .then((response) => sendResponse(response satisfies ApplySavedPreviewResponse))
       .catch((error: unknown) => {
         sendResponse({
@@ -129,7 +174,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   }
 
   if (message.type === "APPLY_SAVED_PREVIEW_ON_TAB") {
-    handleApplySavedPreviewOnTab(message)
+    backgroundServices.messageRouter.handleApplySavedPreviewOnTab(message)
       .then((response) => sendResponse(response satisfies ApplySavedPreviewOnTabResponse))
       .catch((error: unknown) => {
         sendResponse({
@@ -141,7 +186,7 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   }
 
   if (message.type === "SAVE_COMPONENT") {
-    handleSaveComponent(message.payload, sender)
+    handleSaveComponent(message.payload, sender, backgroundServices)
       .then((previewDataUrl) =>
         sendResponse({
           ok: true,
@@ -158,8 +203,42 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
     return true;
   }
 
+  if (message.type === "ADAPT_COMPONENT") {
+    backgroundServices.requestAdaptationFromBackend(message.payload)
+      .then((patch) =>
+        sendResponse({
+          ok: true,
+          patch
+        } satisfies AdaptComponentResponse)
+      )
+      .catch((error: unknown) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Unable to adapt component"
+        } satisfies AdaptComponentResponse);
+      });
+    return true;
+  }
+
+  if (message.type === "SAVE_DERIVED_COMPONENT") {
+    handleSaveDerivedComponent(message.payload, backgroundServices)
+      .then((component) =>
+        sendResponse({
+          ok: true,
+          component
+        } satisfies SaveDerivedComponentResponse)
+      )
+      .catch((error: unknown) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : "Unable to save derived component"
+        } satisfies SaveDerivedComponentResponse);
+      });
+    return true;
+  }
+
   if (isPreviewStatusMessage(message)) {
-    handlePreviewStatus(message, sender).catch((error: unknown) => {
+    backgroundServices.messageRouter.handlePreviewStatus(message, sender).catch((error: unknown) => {
       console.error("Failed to process preview status:", error);
     });
     return false;
@@ -181,17 +260,18 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 async function injectContentScript(activeCollectionId: string): Promise<void> {
-  const tab = await requireActiveTab();
-  await assertCaptureSupportedTab(tab.id!);
-  await setCaptureTargetCollectionId(tab.id!, activeCollectionId);
-  await injectCaptureRuntime(tab.id!);
+  const tab = await backgroundServices.requireActiveTab();
+  await backgroundServices.assertCaptureSupportedTab(tab.id!);
+  await backgroundServices.setCaptureTargetCollectionId(tab.id!, activeCollectionId);
+  await backgroundServices.injectCaptureRuntime(tab.id!);
 }
 
 async function handleSaveComponent(
   payload: SaveComponentPayload,
-  sender: chrome.runtime.MessageSender
+  sender: chrome.runtime.MessageSender,
+  services: BackgroundServices
 ): Promise<string | null> {
-  await libraryRepository.initLibrary();
+  await services.repository.initLibrary();
   validatePayload(payload);
 
   const windowId = sender?.tab?.windowId;
@@ -203,10 +283,10 @@ async function handleSaveComponent(
     payload.bounds,
     payload.devicePixelRatio
   );
-  const thumbnailMeta = await processComponentThumbnail(croppedDataUrl);
+  const thumbnailMeta = await services.processComponentThumbnail(croppedDataUrl);
   const tabId = sender.tab?.id;
   const captureCollectionId =
-    typeof tabId === "number" ? await getCaptureTargetCollectionId(tabId) : null;
+    typeof tabId === "number" ? await services.getCaptureTargetCollectionId(tabId) : null;
   const targetCollectionId = captureCollectionId ?? INBOX_COLLECTION_ID;
 
   const record: SavedComponent = {
@@ -221,11 +301,60 @@ async function handleSaveComponent(
     thumbnailMeta: thumbnailMeta ?? undefined,
     sourceHostSignature: payload.sourceHostSignature
   };
-  const savedComponent = await libraryApplicationService.saveComponent(record);
+  await services.libraryApplicationService.saveComponent(record);
   if (typeof tabId === "number") {
-    await clearCaptureTargetCollectionId(tabId);
+    await services.clearCaptureTargetCollectionId(tabId);
   }
-  return generateCapturePreview(croppedDataUrl);
+  return services.generateCapturePreview(croppedDataUrl);
+}
+
+async function handleSaveDerivedComponent(
+  payload: {
+  sourceComponentId: string;
+  html: string;
+  cssText: string;
+  summary: string;
+  warnings: string[];
+  confidence: number;
+  themeFingerprint: string;
+  },
+  services: BackgroundServices = backgroundServices
+): Promise<SavedComponent> {
+  await services.repository.initLibrary();
+  if (!payload?.sourceComponentId) {
+    throw new Error("Missing source component id");
+  }
+  if (typeof payload.html !== "string" || payload.html.length === 0) {
+    throw new Error("Missing adapted HTML");
+  }
+  if (typeof payload.cssText !== "string") {
+    throw new Error("Missing adapted CSS");
+  }
+  const sourceComponent = await services.repository.getComponent(payload.sourceComponentId);
+  if (!sourceComponent) {
+    throw new Error("Source component not found");
+  }
+
+  const next: SavedComponent = {
+    ...sourceComponent,
+    capturedAt: new Date().toISOString(),
+    html: payload.html,
+    cssText: payload.cssText,
+    title: sourceComponent.title,
+    derivedFromComponentId: undefined,
+    adaptation: {
+      summary: payload.summary,
+      warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
+      confidence:
+        Number.isFinite(payload.confidence) && payload.confidence >= 0 && payload.confidence <= 1
+          ? payload.confidence
+          : 0,
+      themeFingerprint: payload.themeFingerprint,
+      adaptedAt: new Date().toISOString()
+    }
+  };
+
+  return services.libraryApplicationService.saveComponent(next);
 }
 
 function validatePayload(payload: SaveComponentPayload): void {

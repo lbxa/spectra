@@ -13,7 +13,8 @@ export type PreviewRuntimeDiagnosticCode =
   | "anchor_unstable"
   | "fallback_anchor_used"
   | "component_missing"
-  | "partial_apply";
+  | "partial_apply"
+  | "patch_rejected";
 
 export type PreviewRuntimeDiagnosticSeverity = "info" | "warning" | "error";
 

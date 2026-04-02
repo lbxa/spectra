@@ -58,7 +58,12 @@ export function normalizeComponentInput(input: SavedComponent, defaultCollection
     cssText: input.cssText,
     screenshotDataUrl: input.screenshotDataUrl,
     thumbnailMeta: normalizeThumbnailMeta(input.thumbnailMeta),
-    sourceHostSignature: normalizeHostSignature(input.sourceHostSignature)
+    sourceHostSignature: normalizeHostSignature(input.sourceHostSignature),
+    derivedFromComponentId:
+      typeof input.derivedFromComponentId === "string" && input.derivedFromComponentId.trim().length > 0
+        ? input.derivedFromComponentId.trim()
+        : undefined,
+    adaptation: normalizeAdaptation(input.adaptation)
   };
 }
 
@@ -69,7 +74,12 @@ export function normalizeStoredComponent(component: SavedComponent, defaultColle
     ...component,
     collectionIds,
     cssText: typeof component.cssText === "string" ? component.cssText : "",
-    sourceHostSignature
+    sourceHostSignature,
+    derivedFromComponentId:
+      typeof component.derivedFromComponentId === "string" && component.derivedFromComponentId.trim().length > 0
+        ? component.derivedFromComponentId.trim()
+        : undefined,
+    adaptation: normalizeAdaptation(component.adaptation)
   };
 }
 
@@ -214,4 +224,29 @@ function deriveFallbackTitle(url: string): string {
     // Ignore parsing errors and use default fallback.
   }
   return "Untitled component";
+}
+
+function normalizeAdaptation(value: SavedComponent["adaptation"] | undefined): SavedComponent["adaptation"] {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const summary = typeof value.summary === "string" ? value.summary.trim() : "";
+  const warnings = Array.isArray(value.warnings) ? value.warnings.filter((item) => typeof item === "string") : [];
+  const confidence =
+    typeof value.confidence === "number" && Number.isFinite(value.confidence) && value.confidence >= 0 && value.confidence <= 1
+      ? value.confidence
+      : 0;
+  const themeFingerprint =
+    typeof value.themeFingerprint === "string" ? value.themeFingerprint.slice(0, 256) : "";
+  const adaptedAt = typeof value.adaptedAt === "string" ? value.adaptedAt : new Date().toISOString();
+  if (!summary) {
+    return undefined;
+  }
+  return {
+    summary,
+    warnings,
+    confidence,
+    themeFingerprint,
+    adaptedAt
+  };
 }

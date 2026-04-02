@@ -6,6 +6,20 @@ export async function sendStatus(
     | { type: "PREVIEW_INSERTED"; previewId: string; relation: InsertionRelation }
     | { type: "PREVIEW_REMOVED"; previewId: string }
     | { type: "PREVIEW_ERROR"; code: string; message: string }
+    | {
+        type:
+          | "MAGIC_CLICKED"
+          | "MAGIC_REQUEST_STARTED"
+          | "MAGIC_REQUEST_SUCCEEDED"
+          | "MAGIC_REQUEST_FAILED"
+          | "MAGIC_PATCH_APPLIED"
+          | "MAGIC_PATCH_REJECTED"
+          | "MAGIC_ADAPTED_REVISION_SAVED";
+        previewId?: string;
+        componentId?: string;
+        code?: string;
+        message?: string;
+      }
 ): Promise<void> {
   try {
     await chrome.runtime.sendMessage(message);

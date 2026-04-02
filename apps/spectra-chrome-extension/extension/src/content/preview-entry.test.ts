@@ -13,6 +13,7 @@ const testState = vi.hoisted(() => ({
     onSave: () => void;
     onLoadPreviews: () => void;
     onApplyPreview: (previewId: string) => void;
+    onMagic: () => void;
     onClearAll: () => void;
     onExit: () => void;
   } | null,
@@ -90,13 +91,17 @@ vi.mock("./preview-insert", () => ({
 }));
 
 vi.mock("./preview-toolbar", () => ({
-  createPreviewToolbar: vi.fn((handlers: { onUndo: () => void }) => {
+  createPreviewToolbar: vi.fn((handlers: { onUndo: () => void; onMagic: () => void }) => {
     const toolbar = document.createElement("div");
     toolbar.setAttribute("data-mock-toolbar", "true");
     const undo = document.createElement("button");
     undo.setAttribute("data-action", "undo");
     undo.addEventListener("click", handlers.onUndo);
+    const magic = document.createElement("button");
+    magic.setAttribute("data-action", "magic");
+    magic.addEventListener("click", handlers.onMagic);
     toolbar.appendChild(undo);
+    toolbar.appendChild(magic);
 
     return {
       mount(target: HTMLElement) {
@@ -104,6 +109,7 @@ vi.mock("./preview-toolbar", () => ({
         toolbar.setAttribute("data-for-preview-id", previewId);
         document.body.appendChild(toolbar);
       },
+      setMagicState: vi.fn(),
       unmount() {
         toolbar.remove();
       }

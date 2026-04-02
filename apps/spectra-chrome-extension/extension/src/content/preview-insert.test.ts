@@ -43,6 +43,25 @@ describe("preview insert css compatibility", () => {
     vi.restoreAllMocks();
   });
 
+  it("re-scopes :scope rules to preview content only", () => {
+    vi.spyOn(Date, "now").mockReturnValue(123);
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    const cssWithScope = `:scope button { color: rgb(59,130,246); }`;
+    insertPreview(host, createComponent(markScopedCss(cssWithScope)), "inside", "start");
+
+    const style = host.querySelector("style");
+    expect(style?.textContent).toContain(
+      `[data-spectra-preview-id="preview_123"] [data-spectra-preview-content="true"] button`
+    );
+    expect(style?.textContent).not.toContain(":scope button");
+
+    removeAllPreviews();
+    host.remove();
+    vi.restoreAllMocks();
+  });
+
   it("keeps runtime scoping behavior for legacy css captures", () => {
     vi.spyOn(Date, "now").mockReturnValue(123);
     const host = document.createElement("div");

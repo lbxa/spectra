@@ -167,6 +167,43 @@ describe("library repository copy and move", () => {
   });
 });
 
+describe("library repository adaptation metadata normalization", () => {
+  beforeEach(async () => {
+    await resetLibraryState();
+  });
+
+  it("persists sanitized adaptation metadata for derived components", async () => {
+    const collection = await libraryRepository.createCollection({ name: "Adaptation metadata" });
+    const source = buildComponent("source-component", [collection.id]);
+    await libraryRepository.saveComponent(source);
+
+    const derived: SavedComponent = {
+      ...source,
+      id: "derived-component",
+      derivedFromComponentId: `  ${source.id}  `,
+      adaptation: {
+        summary: "  Applied theme adaptation  ",
+        warnings: ["warning_a", "warning_b", 42 as unknown as string],
+        confidence: 0.93,
+        themeFingerprint: "theme-token-hash",
+        adaptedAt: "2026-04-01T10:00:00.000Z"
+      }
+    };
+
+    await libraryRepository.saveComponent(derived);
+    await expect(libraryRepository.getComponent(derived.id)).resolves.toMatchObject({
+      id: derived.id,
+      derivedFromComponentId: source.id,
+      adaptation: {
+        summary: "Applied theme adaptation",
+        warnings: ["warning_a", "warning_b"],
+        confidence: 0.93,
+        themeFingerprint: "theme-token-hash"
+      }
+    });
+  });
+});
+
 describe("library repository saved previews", () => {
   beforeEach(async () => {
     await resetLibraryState();

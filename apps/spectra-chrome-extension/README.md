@@ -7,6 +7,29 @@ Chrome Extension (Manifest V3) for capturing visible UI elements as reusable ref
 - Source URL, title, and capture timestamp.
 - Popup catalogue with screenshot + isolated replay + copy actions.
 
+## Monorepo Placement
+
+This extension now lives in a monorepo workspace:
+
+- Workspace path: `apps/spectra-chrome-extension`.
+- Root workspace orchestration: `package.json` scripts + `turbo.json`.
+- Extension-local release config: `apps/spectra-chrome-extension/release.config.mjs`.
+- Extension-local release scripts: `apps/spectra-chrome-extension/scripts/release/*`.
+- Extension-local release outputs: `apps/spectra-chrome-extension/.release/*`.
+
+Common commands:
+
+- From repo root:
+  - `bun run build`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run release:dry-run`
+- From this workspace (`apps/spectra-chrome-extension`):
+  - `bun run build`
+  - `bun run typecheck`
+  - `bun run test`
+  - `bun run release:dry-run`
+
 ## Project Structure
 
 - `public/manifest.json`: extension metadata and permissions.
@@ -22,6 +45,7 @@ Chrome Extension (Manifest V3) for capturing visible UI elements as reusable ref
 - `extension/src/content/preview-runtime/overlay-manager.ts`: centralized overlay + toolbar/HUD lifecycle.
 - `extension/src/content/preview-runtime/preview-effects.ts`: imperative preview effect helpers.
 - `extension/src/content/preview-runtime/diagnostics.ts`: runtime diagnostics model helpers.
+- `extension/src/content/adapt/*`: Magic Button adaptation request/validation/patch-apply helpers.
 - `extension/src/content/capture-snapshot.ts`: scoped CSS extraction, sanitization, and asset URL rewriting primitives.
 - `extension/src/background.ts`: runtime handlers + screenshot capture/crop orchestration.
 - `extension/src/content/preview-insert.ts`: page preview insertion and CSS compatibility paths.
@@ -165,6 +189,16 @@ The capture pipeline uses a single persisted artifact:
 
 - **Efficiency gate**: primary capture artifact should be materially smaller on representative noisy captures after default/no-op suppression changes.
 - **Fidelity gate**: preview insertion behavior and marker/legacy compatibility tests must remain green.
+
+## Magic Button (MVP)
+
+Magic Button is a one-shot adaptation flow for inserted previews:
+
+1. User clicks the sparkles icon in the preview session toolbar.
+2. Content runtime builds a structured adaptation request from page context + component pack.
+3. Background calls backend `POST /v1/adapt`.
+4. Validated patch is applied locally to the component artifact.
+5. Adapted component is saved back through library service using the same component id (overwrite behavior).
 
 ## Current Product Behavior
 

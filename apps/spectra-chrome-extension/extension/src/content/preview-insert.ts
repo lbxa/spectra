@@ -53,9 +53,10 @@ export function insertPreview(
   content.innerHTML = component.html;
 
   const storedCss = unwrapScopedCss(component.cssText || "");
-  const cssText = storedCss.isScoped
+  const rawCssText = storedCss.isScoped
     ? storedCss.cssText
     : scopeCapturedCss(storedCss.cssText, `[${WRAPPER_ATTR}="${previewId}"]`);
+  const cssText = constrainPreviewCssScope(rawCssText, previewId);
   if (cssText) {
     const style = document.createElement("style");
     style.textContent = cssText;
@@ -71,6 +72,14 @@ export function insertPreview(
     wrapper,
     content
   };
+}
+
+function constrainPreviewCssScope(cssText: string, previewId: string): string {
+  if (!cssText || !cssText.includes(":scope")) {
+    return cssText;
+  }
+  const contentScope = `[${WRAPPER_ATTR}="${previewId}"] [${CONTENT_ATTR}="true"]`;
+  return cssText.replaceAll(":scope", contentScope);
 }
 
 function applyInsertion(host: HTMLElement, wrapper: HTMLDivElement, relation: InsertionRelation): HTMLElement {

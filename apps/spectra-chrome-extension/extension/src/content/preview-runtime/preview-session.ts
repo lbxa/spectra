@@ -1,9 +1,18 @@
-import type { ApplySavedPreviewMessage, BeginTargetingMessage } from "../../lib/library/messages";
+import type {
+  ApplySavedPreviewMessage,
+  BeginTargetingMessage,
+  SaveDerivedComponentResponse
+} from "../../lib/library/messages";
 import type { SavedComponent } from "../../lib/library/types";
 import { rankCandidates } from "../candidate-rank";
 import { scanCandidateContainers, type CandidateContainer } from "../candidate-scan";
 import { insertPreview } from "../preview-insert";
 import { playExtensionSound } from "../extension-audio";
+import { buildComponentPack } from "../adapt/build-component-pack";
+import { applyAdaptationPatch } from "../adapt/apply-adaptation-patch";
+import { requestAdaptation } from "../adapt/request-adaptation";
+import { validateAdaptationPatch } from "../adapt/validate-adaptation-patch";
+import { extractTargetSiteContext } from "../theme/extract-target-site-context";
 import {
   installCaptureInteractionGuards,
   resolveSelectedTarget
@@ -37,11 +46,46 @@ export type PreviewSessionRuntime = {
   teardown: () => void;
 };
 
-type PreviewSessionOptions = {
+export type PreviewSessionMessaging = {
+  sendStatus: typeof sendStatus;
+  sendRuntimeRequest: <TResponse>(message: unknown) => Promise<TResponse>;
+  subscribeRuntimeMessages: (listener: (message: unknown) => void) => () => void;
+};
+
+export type PreviewSessionAdaptationDeps = {
+  extractTargetSiteContext: typeof extractTargetSiteContext;
+  buildComponentPack: typeof buildComponentPack;
+  requestAdaptation: typeof requestAdaptation;
+  validateAdaptationPatch: typeof validateAdaptationPatch;
+  applyAdaptationPatch: typeof applyAdaptationPatch;
+};
+
+export type PreviewSessionOptions = {
   onTeardown?: () => void;
+  messaging?: PreviewSessionMessaging;
+  adaptation?: PreviewSessionAdaptationDeps;
+};
+
+const defaultMessaging: PreviewSessionMessaging = {
+  sendStatus,
+  sendRuntimeRequest,
+  subscribeRuntimeMessages: (listener) => {
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }
+};
+
+const defaultAdaptationDeps: PreviewSessionAdaptationDeps = {
+  extractTargetSiteContext,
+  buildComponentPack,
+  requestAdaptation,
+  validateAdaptationPatch,
+  applyAdaptationPatch
 };
 
 export function createPreviewSession(options: PreviewSessionOptions = {}): PreviewSessionRuntime {
+  const messaging = options.messaging ?? defaultMessaging;
+  const adaptation = options.adaptation ?? defaultAdaptationDeps;
   let state: PreviewRuntimeState = initialPreviewRuntimeState;
   let lastHoveredTarget: Element | null = null;
 
@@ -139,7 +183,7 @@ export function createPreviewSession(options: PreviewSessionOptions = {}): Previ
       });
       dispatch({ type: "ADD_DIAGNOSTIC", diagnostic });
       overlayManager.showToast(diagnostic.message);
-      await sendStatus({
+      await messaging.sendStatus({
         type: "PREVIEW_ERROR",
         code: "no_candidates",
         message: diagnostic.message
@@ -165,7 +209,7 @@ export function createPreviewSession(options: PreviewSessionOptions = {}): Previ
       lastHoveredTarget = activeCandidate.element;
       applyTargetingCandidateEffect(overlay, activeCandidate, state.relation);
     }
-    await sendStatus({ type: "PREVIEW_READY" });
+    await messaging.sendStatus({ type: "PREVIEW_READY" });
   };
 
   const commitInsert = async (candidate: CandidateContainer, component: SavedComponent): Promise<void> => {
@@ -180,7 +224,7 @@ export function createPreviewSession(options: PreviewSessionOptions = {}): Previ
     clearTargetingChromeEffect(overlay);
     showInsertedSelectionEffect(overlay, inserted.wrapper.getBoundingClientRect());
 
-    await sendStatus({
+    await messaging.sendStatus({
       type: "PREVIEW_INSERTED",
       previewId: inserted.previewId,
       relation: state.relation
@@ -190,6 +234,121 @@ export function createPreviewSession(options: PreviewSessionOptions = {}): Previ
   const clearAllInsertedPreviews = (notify: boolean = true): void => {
     registry.clear(notify);
     syncInsertedState();
+  };
+
+  const hasPreview = (previewId: string): boolean =>
+    registry.list().some((record) => record.inserted.previewId === previewId);
+
+  const runMagicAdaptation = async (previewId: string, component: SavedComponent): Promise<void> => {
+    if (!hasPreview(previewId)) {
+      return;
+    }
+    registry.setMagicState(previewId, "loading");
+    await messaging.sendStatus({ type: "MAGIC_CLICKED", previewId, componentId: component.id });
+    await messaging.sendStatus({ type: "MAGIC_REQUEST_STARTED", previewId, componentId: component.id });
+
+    try {
+      await runWithBusyState(async () => {
+        const record = registry.list().find((entry) => entry.inserted.previewId === previewId);
+        if (!record) {
+          throw new Error("Preview no longer exists");
+        }
+        const targetSiteContext = adaptation.extractTargetSiteContext(record.host);
+        const componentPack = adaptation.buildComponentPack(component);
+        targetSiteContext.hardConstraints.protectedNodeIds = componentPack.protectedNodeIds;
+
+        const adaptationResponse = await adaptation.requestAdaptation({
+          targetSiteContext,
+          componentPack
+        });
+        if (!adaptationResponse.ok || !adaptationResponse.patch) {
+          throw new Error(adaptationResponse.error || "Adaptation request failed");
+        }
+        await messaging.sendStatus({ type: "MAGIC_REQUEST_SUCCEEDED", previewId, componentId: component.id });
+
+        const validation = adaptation.validateAdaptationPatch(adaptationResponse.patch, componentPack);
+        if (!validation.ok) {
+          const diagnostic = createRuntimeDiagnostic({
+            code: "patch_rejected",
+            message: validation.reason,
+            severity: "warning"
+          });
+          dispatch({ type: "ADD_DIAGNOSTIC", diagnostic });
+          overlayManager.showToast(validation.reason);
+          await messaging.sendStatus({
+            type: "MAGIC_PATCH_REJECTED",
+            previewId,
+            componentId: component.id,
+            message: validation.reason
+          });
+          registry.setMagicState(previewId, "error");
+          return;
+        }
+
+        const applied = adaptation.applyAdaptationPatch(componentPack, adaptationResponse.patch);
+        await messaging.sendStatus({
+          type: "MAGIC_PATCH_APPLIED",
+          previewId,
+          componentId: component.id,
+          message: adaptationResponse.patch.summary
+        });
+
+        const saveResponse = await messaging.sendRuntimeRequest<SaveDerivedComponentResponse>({
+          type: "SAVE_DERIVED_COMPONENT",
+          payload: {
+            sourceComponentId: component.id,
+            html: applied.html,
+            cssText: applied.cssText,
+            summary: adaptationResponse.patch.summary,
+            warnings: [...adaptationResponse.patch.warnings, ...applied.warnings],
+            confidence: adaptationResponse.patch.confidence,
+            themeFingerprint: targetSiteContext.metadata.themeFingerprint
+          }
+        });
+
+        if (!saveResponse?.ok || !saveResponse.component) {
+          throw new Error(saveResponse?.error || "Failed to save adapted revision");
+        }
+
+        if (hasPreview(previewId)) {
+          registry.replaceComponent(previewId, saveResponse.component);
+          syncInsertedState();
+          registry.setMagicState(previewId, "success");
+        }
+
+        await messaging.sendStatus({
+          type: "MAGIC_ADAPTED_REVISION_SAVED",
+          previewId,
+          componentId: saveResponse.component.id
+        });
+        overlayManager.showToast("Component adapted");
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to adapt component";
+      const diagnostic = createRuntimeDiagnostic({
+        code: "partial_apply",
+        message,
+        severity: "error"
+      });
+      dispatch({ type: "ADD_DIAGNOSTIC", diagnostic });
+      overlayManager.showToast(message);
+      if (hasPreview(previewId)) {
+        registry.setMagicState(previewId, "error");
+      }
+      await messaging.sendStatus({
+        type: "MAGIC_REQUEST_FAILED",
+        previewId,
+        componentId: component.id,
+        code: "adaptation_failed",
+        message
+      });
+    } finally {
+      window.setTimeout(() => {
+        if (hasPreview(previewId)) {
+          registry.setMagicState(previewId, "idle");
+        }
+      }, 1200);
+    }
   };
 
   const exitPreviewMode = (): void => {
@@ -259,7 +418,7 @@ export function createPreviewSession(options: PreviewSessionOptions = {}): Previ
         });
         dispatch({ type: "ADD_DIAGNOSTIC", diagnostic });
         overlayManager.showToast(message);
-        void sendStatus({ type: "PREVIEW_ERROR", code: "insert_failed", message });
+        void messaging.sendStatus({ type: "PREVIEW_ERROR", code: "insert_failed", message });
         resetToIdle();
       });
     },
@@ -294,7 +453,7 @@ export function createPreviewSession(options: PreviewSessionOptions = {}): Previ
         overlayManager.showToast("Preview removed by page update");
       }
       if (notify || reason === "mutation") {
-        void sendStatus({ type: "PREVIEW_REMOVED", previewId });
+        void messaging.sendStatus({ type: "PREVIEW_REMOVED", previewId });
       }
       syncInsertedState(reason === "mutation");
       if (reason === "mutation" && !isTargetingMode() && registry.size() === 0) {
@@ -303,12 +462,15 @@ export function createPreviewSession(options: PreviewSessionOptions = {}): Previ
     },
     onRetargetRequested: (component) => {
       void beginTargeting({ type: "BEGIN_TARGETING", component });
+    },
+    onMagicRequested: (previewId: string, component: SavedComponent) => {
+      void runMagicAdaptation(previewId, component);
     }
   });
 
   savedPreviewService = createSavedPreviewService({
     runWithBusyState,
-    requestRuntime: sendRuntimeRequest,
+    requestRuntime: messaging.sendRuntimeRequest,
     getInsertedPreviews: registry.list,
     onInsertResolvedPreview: (host, component, relation, alignment) => {
       const inserted = insertPreview(host, component, relation, alignment);
@@ -353,15 +515,15 @@ export function createPreviewSession(options: PreviewSessionOptions = {}): Previ
     interactionController.start();
   };
 
+  const unsubscribeRuntimeMessages = messaging.subscribeRuntimeMessages(onRuntimeMessage);
+
   const teardown = (): void => {
     registry.teardown();
     interactionController.stop();
     overlayManager.destroy();
-    chrome.runtime.onMessage.removeListener(onRuntimeMessage);
+    unsubscribeRuntimeMessages();
     options.onTeardown?.();
   };
-
-  chrome.runtime.onMessage.addListener(onRuntimeMessage);
 
   return {
     teardown

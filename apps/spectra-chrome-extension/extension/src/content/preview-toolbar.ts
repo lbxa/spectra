@@ -2,10 +2,11 @@ import type { InsertionRelation, PreviewAlignment } from "../lib/library/message
 import { autoUpdate, computePosition, flip, offset, shift, type ComputePositionReturn } from "@floating-ui/dom";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { PreviewToolbar } from "./PreviewToolbar";
+import { PreviewToolbar, type MagicButtonState } from "./PreviewToolbar";
 
 export type PreviewToolbarControls = {
   mount: (target: HTMLElement, relation: InsertionRelation, alignment: PreviewAlignment) => void;
+  setMagicState: (state: MagicButtonState) => void;
   unmount: () => void;
 };
 
@@ -13,6 +14,7 @@ export function createPreviewToolbar(
   handlers: {
     onUndo: () => void;
     onRetarget: () => void;
+    onMagic: () => void;
     onRelationChange: (relation: InsertionRelation) => void;
     onAlignmentChange: (alignment: PreviewAlignment) => void;
   }
@@ -25,8 +27,11 @@ export function createPreviewToolbar(
   const container = document.createElement("div");
   let root: Root | null = null;
   let cleanupAutoUpdate: (() => void) | null = null;
+  let relation: InsertionRelation = "inside";
+  let alignment: PreviewAlignment = "start";
+  let magicState: MagicButtonState = "idle";
 
-  const renderToolbar = (relation: InsertionRelation, alignment: PreviewAlignment): void => {
+  const renderToolbar = (): void => {
     if (!root) {
       root = createRoot(container);
     }
@@ -36,6 +41,8 @@ export function createPreviewToolbar(
         alignment,
         onUndo: handlers.onUndo,
         onRetarget: handlers.onRetarget,
+        onMagic: handlers.onMagic,
+        magicState,
         onRelationChange: handlers.onRelationChange,
         onAlignmentChange: handlers.onAlignmentChange
       })
@@ -44,13 +51,15 @@ export function createPreviewToolbar(
 
   return {
     mount(target, currentRelation, currentAlignment) {
+      relation = currentRelation;
+      alignment = currentAlignment;
       if (!host.isConnected) {
         document.documentElement.appendChild(host);
       }
       if (!container.isConnected) {
         host.appendChild(container);
       }
-      renderToolbar(currentRelation, currentAlignment);
+      renderToolbar();
       host.style.display = "block";
 
       const updatePosition = (): void => {
@@ -67,6 +76,10 @@ export function createPreviewToolbar(
       cleanupAutoUpdate?.();
       cleanupAutoUpdate = autoUpdate(target, host, updatePosition);
       updatePosition();
+    },
+    setMagicState(state) {
+      magicState = state;
+      renderToolbar();
     },
     unmount() {
       cleanupAutoUpdate?.();

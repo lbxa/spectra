@@ -6,6 +6,7 @@ describe("PreviewToolbar", () => {
   it("routes undo, retarget, and alignment actions", () => {
     const onUndo = vi.fn();
     const onRetarget = vi.fn();
+    const onMagic = vi.fn();
     const onRelationChange = vi.fn();
     const onAlignmentChange = vi.fn();
 
@@ -15,6 +16,7 @@ describe("PreviewToolbar", () => {
         alignment="start"
         onUndo={onUndo}
         onRetarget={onRetarget}
+        onMagic={onMagic}
         onRelationChange={onRelationChange}
         onAlignmentChange={onAlignmentChange}
       />
@@ -22,10 +24,12 @@ describe("PreviewToolbar", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     fireEvent.click(screen.getByRole("button", { name: "Retarget" }));
+    fireEvent.click(screen.getByRole("button", { name: "Magic adapt" }));
     fireEvent.click(screen.getByRole("button", { name: "Center align" }));
 
     expect(onUndo).toHaveBeenCalledTimes(1);
     expect(onRetarget).toHaveBeenCalledTimes(1);
+    expect(onMagic).toHaveBeenCalledTimes(1);
     expect(onAlignmentChange).toHaveBeenCalledWith("center");
     expect(onRelationChange).not.toHaveBeenCalled();
   });
