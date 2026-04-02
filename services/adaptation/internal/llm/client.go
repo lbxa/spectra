@@ -140,15 +140,58 @@ func fallbackPatch(prompt PromptPayload) (models.AdaptationPatch, models.TokenUs
 		return models.AdaptationPatch{}, models.TokenUsage{}, fmt.Errorf("decode fallback request payload: %w", err)
 	}
 	wrapperSelector := "#" + request.ComponentPack.WrapperRootID
+	insertionZone := request.TargetSiteContext.InsertionZone
+	color := nonEmptyOrFallback(insertionZone.Color, "inherit")
+	backgroundColor := nonEmptyOrFallback(insertionZone.BackgroundColor, "transparent")
+	fontFamily := nonEmptyOrFallback(insertionZone.FontFamily, "inherit")
+	fontSize := pxOrFallback(insertionZone.FontSizePx, "inherit")
+	lineHeight := pxOrFallback(insertionZone.LineHeightPx, "inherit")
+	borderRadius := pxOrFallback(insertionZone.BorderRadiusPx, "0px")
+	display := nonEmptyOrFallback(insertionZone.Display, "block")
+
+		overrideCSS := strings.Join([]string{
+		wrapperSelector + " { " +
+			"display: " + display + "; " +
+			"color: " + color + "; " +
+			"background-color: " + backgroundColor + "; " +
+			"font-family: " + fontFamily + "; " +
+			"font-size: " + fontSize + "; " +
+			"line-height: " + lineHeight + "; " +
+			"border-radius: " + borderRadius + "; " +
+			"box-shadow: none; " +
+			"border: 0; " +
+			"margin: 0; " +
+			"padding: 0; " +
+			"transition: color 180ms ease, background-color 180ms ease; " +
+			"}",
+		wrapperSelector + " :where(*):not(svg):not(path):not(g) { " +
+			"font-family: inherit; " +
+			"color: inherit; " +
+			"line-height: inherit; " +
+			"}",
+		wrapperSelector + " :where(button):not(svg), " +
+			wrapperSelector + " :where(a):not(svg), " +
+			wrapperSelector + " :where(input), " +
+			wrapperSelector + " :where(select), " +
+			wrapperSelector + " :where(textarea), " +
+			wrapperSelector + " :where([role=\"button\"]), " +
+			wrapperSelector + " :where([role=\"link\"]) { " +
+			"font: inherit; " +
+			"color: inherit; " +
+			"background-color: transparent; " +
+			"border-radius: " + borderRadius + "; " +
+			"}",
+	}, "\n")
+
 	patch := models.AdaptationPatch{
-		Strategy:    "css_override",
-		Summary:     "Applied conservative fallback adaptation",
-		OverrideCSS: wrapperSelector + " { color: inherit; font-family: inherit; border-radius: inherit; }",
+		Strategy:      "css_override",
+		Summary:       "Applied conservative fallback adaptation",
+		OverrideCSS:   overrideCSS,
 		AttributeEdits: []models.AttributeEdit{},
 		PreservedNodeIDs: append([]string{}, request.ComponentPack.ProtectedNodeIDs...),
-		Confidence:      0.42,
+		Confidence:      0.58,
 		Warnings: []string{
-			"LLM API key not configured; fallback adaptation was used",
+			"LLM API key not configured; deterministic fallback adaptation was used",
 		},
 	}
 	return patch, models.TokenUsage{
@@ -179,4 +222,19 @@ func decodeFallbackRequest(payload string) (models.AdaptRequest, error) {
 		return models.AdaptRequest{}, err
 	}
 	return repairEnvelope.Request, nil
+}
+
+func nonEmptyOrFallback(value string, fallback string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return fallback
+	}
+	return trimmed
+}
+
+func pxOrFallback(value float64, fallback string) string {
+	if value <= 0 {
+		return fallback
+	}
+	return fmt.Sprintf("%.2fpx", value)
 }
