@@ -3,6 +3,7 @@
 ## Workflow Guardrails
 
 - Check `AGENT_LEARNINGS.md` at the start of implementation/review work and follow any active guidance there as part of the standard workflow.
+- In this monorepo, keep Chrome extension implementation and release changes scoped to `apps/spectra-chrome-extension` unless root workspace orchestration changes are explicitly required.
 - Run verification gates before claiming completion:
   - `bun run typecheck`
   - `bun run build`
@@ -10,7 +11,7 @@
   - Do not ship optimizations that regress preview insertion behavior.
   - Keep compatibility for both marker-tagged scoped CSS payloads and legacy unmarked CSS payloads.
 - Respect architecture seams when modifying extension logic:
-  - Keep runtime message/event contracts in `extension/src/lib/library/messages.ts`.
+  - Keep runtime message/event contracts in `apps/spectra-chrome-extension/extension/src/lib/library/messages.ts`.
   - Route library mutations through `LibraryApplicationService` instead of ad-hoc payload assembly.
 
 ## Release and Versioning Protocol
@@ -49,16 +50,16 @@ When evaluating content preview runtime work (for example `preview-entry.ts`, `p
 
 Treat capture and preview as a mini-editor runtime, not ordinary page UI.
 
-- Keep `extension/src/content.ts` and `extension/src/content/preview-entry.ts` bootstrap-only.
+- Keep `apps/spectra-chrome-extension/extension/src/content.ts` and `apps/spectra-chrome-extension/extension/src/content/preview-entry.ts` bootstrap-only.
 - Keep preview surface state/commands/transitions explicit:
-  - `extension/src/content/preview-runtime/surface-model.ts`
-  - `extension/src/content/preview-runtime/surface-commands.ts`
-  - `extension/src/content/preview-runtime/surface-reducer.ts`
-- Keep side effects centralized in `extension/src/content/preview-runtime/preview-session.ts` + `preview-effects.ts`; avoid direct DOM writes from view components.
-- Route overlay/session chrome through `extension/src/content/preview-runtime/overlay-manager.ts`.
-- Route pointer/keyboard input through `extension/src/content/targeting/interaction-controller.ts`; do not reintroduce ad-hoc global listener paths in preview controller code.
-- Keep capture interaction/session lifecycle under `extension/src/content/capture/capture-session.ts` with explicit cleanup ownership.
-- Treat diagnostics as product state (not logs) via `extension/src/content/preview-runtime/diagnostics.ts` and confidence-gated apply behavior in `saved-preview-service.ts`.
+  - `apps/spectra-chrome-extension/extension/src/content/preview-runtime/surface-model.ts`
+  - `apps/spectra-chrome-extension/extension/src/content/preview-runtime/surface-commands.ts`
+  - `apps/spectra-chrome-extension/extension/src/content/preview-runtime/surface-reducer.ts`
+- Keep side effects centralized in `apps/spectra-chrome-extension/extension/src/content/preview-runtime/preview-session.ts` + `preview-effects.ts`; avoid direct DOM writes from view components.
+- Route overlay/session chrome through `apps/spectra-chrome-extension/extension/src/content/preview-runtime/overlay-manager.ts`.
+- Route pointer/keyboard input through `apps/spectra-chrome-extension/extension/src/content/targeting/interaction-controller.ts`; do not reintroduce ad-hoc global listener paths in preview controller code.
+- Keep capture interaction/session lifecycle under `apps/spectra-chrome-extension/extension/src/content/capture/capture-session.ts` with explicit cleanup ownership.
+- Treat diagnostics as product state (not logs) via `apps/spectra-chrome-extension/extension/src/content/preview-runtime/diagnostics.ts` and confidence-gated apply behavior in `saved-preview-service.ts`.
 
 ## File Naming
 
@@ -73,3 +74,31 @@ Treat capture and preview as a mini-editor runtime, not ordinary page UI.
 - Distinguish clearly between blockers and suggestions. Block only for issues likely to cause bugs, regressions, or architectural debt.
 - Avoid pedantry: do not block on personal preferences when code is clear, consistent with local patterns, and safe.
 - Preserve momentum: prefer small, actionable feedback that unblocks shipping while tracking non-critical improvements separately.
+
+## Learnings
+
+### Capture and Preview
+
+- Preserve visual fidelity first; optimize only when behavior parity is proven.
+- Keep one canonical capture artifact contract; avoid parallel payload formats.
+- Prefer safe degradation when confidence is low instead of silent best-guess behavior.
+
+### Architecture Boundaries
+
+- Keep runtime contracts and domain mutation/event seams centralized.
+- Keep entry files orchestration-only; move domain logic into focused runtime modules.
+- Keep side effects owned by one controller/session boundary, not scattered across components.
+- Keep UI components mostly declarative and command-dispatch oriented.
+
+### Imperative Runtime Design
+
+- Model capture/preview as a mini-editor runtime, not a standard app screen.
+- Use explicit mode/command transitions to avoid implicit boolean state drift.
+- Centralize overlay lifecycle and input routing so behavior remains coherent.
+- Treat diagnostics as product state (for confidence, fallback, and partial success), not just logs.
+
+### Verification Discipline
+
+- Lock behavior with characterization and targeted UI stability tests before large refactors.
+- Run required verification gates (`typecheck`, `build`) before claiming completion.
+- When behavior-affecting policies change, update docs and tests in the same change set.
