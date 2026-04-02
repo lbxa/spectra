@@ -14,6 +14,7 @@ export const sharedViteConfig = defineConfig({
   define: {
     "process.env": {},
     "process.env.NODE_ENV": JSON.stringify("production"),
+    __DEBUG__: JSON.stringify(process.env.SPECTRA_DEBUG === "true"),
   },
   resolve: {
     alias: {

@@ -38,7 +38,7 @@ func TestServiceReturnsPatchOnFirstValidResult(t *testing.T) {
 			},
 		},
 	}
-	service := NewService(client, NewValidator(2000), slog.Default())
+	service := NewService(client, NewValidator(2000), slog.Default(), false)
 	patch, err := service.Adapt(context.Background(), models.AdaptRequest{}, "req-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -61,7 +61,7 @@ func TestServiceNormalizesUnscopedSelectorBeforeValidation(t *testing.T) {
 			},
 		},
 	}
-	service := NewService(client, NewValidator(2000), slog.Default())
+	service := NewService(client, NewValidator(2000), slog.Default(), false)
 	patch, err := service.Adapt(context.Background(), models.AdaptRequest{}, "req-normalize")
 	if err != nil {
 		t.Fatalf("expected normalization to pass validation, got error: %v", err)
@@ -84,7 +84,7 @@ func TestServiceReturnsValidationFailure(t *testing.T) {
 			},
 		},
 	}
-	service := NewService(client, NewValidator(2000), slog.Default())
+	service := NewService(client, NewValidator(2000), slog.Default(), false)
 	_, err := service.Adapt(context.Background(), models.AdaptRequest{}, "req-2")
 	if err == nil {
 		t.Fatalf("expected validation error")

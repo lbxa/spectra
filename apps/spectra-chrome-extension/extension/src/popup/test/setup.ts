@@ -4,6 +4,8 @@ import { afterEach, beforeEach, vi } from "vitest";
 
 type MessageListener = (message: unknown) => void;
 
+Reflect.set(globalThis, "__DEBUG__", false);
+
 const storageState = new Map<string, unknown>();
 const messageListeners = new Set<MessageListener>();
 const audioPlaySpy = vi.fn(async () => undefined);

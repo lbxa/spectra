@@ -64,6 +64,53 @@ export type NativeExemplarStyle = {
   cssText: string;
 };
 
+export type HostSceneTypography = {
+  bodyFontFamily?: string;
+  bodyFontSizePx?: number;
+  bodyLineHeightPx?: number;
+  headingScale?: number;
+  commonFontWeights: number[];
+};
+
+export type HostSceneColors = {
+  textPrimary?: string;
+  textMuted?: string;
+  surfaceBase?: string;
+  surfaceMuted?: string;
+  borderSubtle?: string;
+  accent?: string;
+};
+
+export type HostSceneSurface = {
+  borderRadiusPx?: number;
+  hasShadow: boolean;
+};
+
+export type HostSceneDensity = {
+  spacingPx?: number;
+  compactness: "compact" | "balanced" | "spacious";
+};
+
+export type HostSceneSummary = {
+  typography: HostSceneTypography;
+  colors: HostSceneColors;
+  surface: HostSceneSurface;
+  density: HostSceneDensity;
+};
+
+export type ComponentIntentSummary = {
+  semanticRole: string;
+  emphasisLevel: "subtle" | "balanced" | "strong";
+  headingScale: number;
+  dominantWeight: number;
+  bodyWeight: number;
+  hasSurfaceBackground: boolean;
+  hasSurfaceBorder: boolean;
+  hasSurfaceShadow: boolean;
+  cornerStyle: "sharp" | "rounded";
+  colorIntent: "neutral" | "accent" | "positive" | "warning" | "danger";
+};
+
 export type TargetSiteContext = {
   globalThemeTokens: ThemeTokenMap;
   insertionContext: {
@@ -75,6 +122,7 @@ export type TargetSiteContext = {
     computedBackgroundColor?: string;
   };
   nativeExemplars: NativeExemplarStyle[];
+  hostSceneSummary: HostSceneSummary;
   hardConstraints: {
     maxOverrideCssChars: number;
     protectedNodeIds: string[];
@@ -91,11 +139,13 @@ export type ComponentPack = {
   baseCss: string;
   stableNodeIds: string[];
   semanticRoleHint: string;
+  componentIntentSummary: ComponentIntentSummary;
   protectedNodeIds: string[];
   wrapperRootId: string;
 };
 
 export type AdaptRequest = {
+  requestId?: string;
   targetSiteContext: TargetSiteContext;
   componentPack: ComponentPack;
 };

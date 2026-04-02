@@ -35,8 +35,10 @@ function buildCompactStyleProfile(element: HTMLElement): string {
     ["line-height", style.lineHeight],
     ["color", style.color],
     ["background-color", style.backgroundColor],
+    ["border-color", style.borderColor],
     ["border-radius", style.borderRadius],
     ["padding", style.padding],
+    ["margin", style.margin],
     ["gap", style.gap],
     ["box-shadow", style.boxShadow]
   ];

@@ -32,6 +32,8 @@ describe("adaptation modules", () => {
     expect(pack.stableNodeIds.length).toBeGreaterThan(0);
     expect(pack.wrapperRootId).toBe("spectra-root");
     expect(pack.normalizedHtml).toContain("data-spectra-node-id");
+    expect(pack.componentIntentSummary.semanticRole).toBeTruthy();
+    expect(pack.componentIntentSummary.emphasisLevel).toBeDefined();
   });
 
   it("rejects patches with unknown node ids", () => {

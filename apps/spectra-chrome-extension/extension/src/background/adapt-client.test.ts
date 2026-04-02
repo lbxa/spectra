@@ -14,6 +14,31 @@ function createRequest(): AdaptRequest {
         hostClasses: ["hero"]
       },
       nativeExemplars: [],
+      hostSceneSummary: {
+        typography: {
+          bodyFontFamily: "Inter",
+          bodyFontSizePx: 16,
+          bodyLineHeightPx: 24,
+          headingScale: 1.3,
+          commonFontWeights: [400, 500]
+        },
+        colors: {
+          textPrimary: "rgb(20 20 20)",
+          textMuted: "rgb(90 90 90)",
+          surfaceBase: "rgb(255 255 255)",
+          surfaceMuted: "rgb(245 245 245)",
+          borderSubtle: "rgb(220 220 220)",
+          accent: "rgb(50 100 240)"
+        },
+        surface: {
+          borderRadiusPx: 8,
+          hasShadow: false
+        },
+        density: {
+          spacingPx: 12,
+          compactness: "balanced"
+        }
+      },
       hardConstraints: {
         maxOverrideCssChars: 2000,
         protectedNodeIds: ["node-1"]
@@ -29,6 +54,18 @@ function createRequest(): AdaptRequest {
       baseCss: ".card{padding:8px;}",
       stableNodeIds: ["node-1"],
       semanticRoleHint: "Card",
+      componentIntentSummary: {
+        semanticRole: "Card",
+        emphasisLevel: "balanced",
+        headingScale: 1.2,
+        dominantWeight: 600,
+        bodyWeight: 400,
+        hasSurfaceBackground: true,
+        hasSurfaceBorder: false,
+        hasSurfaceShadow: false,
+        cornerStyle: "rounded",
+        colorIntent: "accent"
+      },
       protectedNodeIds: ["node-1"],
       wrapperRootId: "spectra-root"
     }
@@ -110,11 +147,20 @@ describe("requestAdaptationFromBackend", () => {
         url: "https://example.com/page",
         title: "Example Page",
         rootSelector: "section",
-        protectedNodeIds: ["node-1"]
+        protectedNodeIds: ["node-1"],
+        hostSceneSummary: {
+          typography: {
+            bodyFontFamily: "Inter"
+          }
+        }
       },
       componentPack: {
         title: "Card",
-        html: "<div data-spectra-node-id=\"node-1\">Card</div>"
+        html: "<div data-spectra-node-id=\"node-1\">Card</div>",
+        componentIntentSummary: {
+          semanticRole: "Card",
+          emphasisLevel: "balanced"
+        }
       }
     });
   });

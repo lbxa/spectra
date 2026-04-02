@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 )
 
 type Prompt struct {
+	RequestID string
 	System    string
 	Developer string
 	User      string
@@ -34,13 +36,17 @@ type OpenAIClient struct {
 	httpClient *http.Client
 	apiKey     string
 	model      string
+	logger     *slog.Logger
+	debug      bool
 }
 
-func NewOpenAIClient(apiKey, model string, timeout time.Duration) *OpenAIClient {
+func NewOpenAIClient(apiKey, model string, timeout time.Duration, logger *slog.Logger, debug bool) *OpenAIClient {
 	return &OpenAIClient{
 		httpClient: &http.Client{Timeout: timeout},
 		apiKey:     apiKey,
 		model:      model,
+		logger:     logger,
+		debug:      debug,
 	}
 }
 
@@ -67,6 +73,17 @@ func (c *OpenAIClient) Adapt(ctx context.Context, prompt Prompt) (models.Adaptat
 	if err != nil {
 		return models.AdaptationPatch{}, Usage{}, fmt.Errorf("marshal openai request: %w", err)
 	}
+	if c.debug {
+		c.logger.Info(
+			"llm_request_built",
+			"request_id", prompt.RequestID,
+			"model", c.model,
+			"system_chars", len(prompt.System),
+			"developer_chars", len(prompt.Developer),
+			"user_chars", len(prompt.User),
+			"payload", truncateForLog(string(payload)),
+		)
+	}
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.openai.com/v1/chat/completions", bytes.NewReader(payload))
 	if err != nil {
@@ -84,6 +101,14 @@ func (c *OpenAIClient) Adapt(ctx context.Context, prompt Prompt) (models.Adaptat
 	rawBody, err := io.ReadAll(response.Body)
 	if err != nil {
 		return models.AdaptationPatch{}, Usage{}, fmt.Errorf("read openai response: %w", err)
+	}
+	if c.debug {
+		c.logger.Info(
+			"llm_response_received",
+			"request_id", prompt.RequestID,
+			"status", response.StatusCode,
+			"body", truncateForLog(string(rawBody)),
+		)
 	}
 	if response.StatusCode >= 300 {
 		return models.AdaptationPatch{}, Usage{}, fmt.Errorf("openai status %d: %s", response.StatusCode, strings.TrimSpace(string(rawBody)))
@@ -168,4 +193,12 @@ func adaptationPatchSchema() map[string]any {
 func estimateCostUSD(promptTokens, completionTokens int64) float64 {
 	// Placeholder estimation for observability only.
 	return float64(promptTokens)*0.000002 + float64(completionTokens)*0.000008
+}
+
+func truncateForLog(value string) string {
+	const maxChars = 8000
+	if len(value) <= maxChars {
+		return value
+	}
+	return fmt.Sprintf("%s… [truncated %d chars]", value[:maxChars], len(value)-maxChars)
 }

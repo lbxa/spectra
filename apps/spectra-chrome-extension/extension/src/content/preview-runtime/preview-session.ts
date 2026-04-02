@@ -66,6 +66,9 @@ export type PreviewSessionOptions = {
   adaptation?: PreviewSessionAdaptationDeps;
 };
 
+const MAX_DEBUG_LOG_CHARS = 8_000;
+declare const __DEBUG__: boolean;
+
 const defaultMessaging: PreviewSessionMessaging = {
   sendStatus,
   sendRuntimeRequest,
@@ -253,17 +256,38 @@ export function createPreviewSession(options: PreviewSessionOptions = {}): Previ
         if (!record) {
           throw new Error("Preview no longer exists");
         }
+        const requestId = createAdaptationRequestId();
+        await logAdaptationDebug("raw_component_input", {
+          requestId,
+          previewId,
+          componentId: component.id,
+          html: truncateDebugString(component.html),
+          cssText: truncateDebugString(component.cssText ?? "")
+        });
+
         const targetSiteContext = adaptation.extractTargetSiteContext(record.host);
         const componentPack = adaptation.buildComponentPack(component);
         targetSiteContext.hardConstraints.protectedNodeIds = componentPack.protectedNodeIds;
+        await logAdaptationDebug("llm_context_payload", {
+          requestId,
+          previewId,
+          targetSiteContext: truncateDebugValue(targetSiteContext),
+          componentPack: truncateDebugValue(componentPack)
+        });
 
         const adaptationResponse = await adaptation.requestAdaptation({
+          requestId,
           targetSiteContext,
           componentPack
         });
         if (!adaptationResponse.ok || !adaptationResponse.patch) {
           throw new Error(adaptationResponse.error || "Adaptation request failed");
         }
+        await logAdaptationDebug("adapt_response_patch", {
+          requestId,
+          previewId,
+          patch: truncateDebugValue(adaptationResponse.patch)
+        });
         await messaging.sendStatus({ type: "MAGIC_REQUEST_SUCCEEDED", previewId, componentId: component.id });
 
         const validation = adaptation.validateAdaptationPatch(adaptationResponse.patch, componentPack);
@@ -286,6 +310,13 @@ export function createPreviewSession(options: PreviewSessionOptions = {}): Previ
         }
 
         const applied = adaptation.applyAdaptationPatch(componentPack, adaptationResponse.patch);
+        await logAdaptationDebug("applied_component_output", {
+          requestId,
+          previewId,
+          html: truncateDebugString(applied.html),
+          cssText: truncateDebugString(applied.cssText),
+          warningCount: applied.warnings.length
+        });
         await messaging.sendStatus({
           type: "MAGIC_PATCH_APPLIED",
           previewId,
@@ -312,6 +343,13 @@ export function createPreviewSession(options: PreviewSessionOptions = {}): Previ
 
         if (hasPreview(previewId)) {
           registry.replaceComponent(previewId, saveResponse.component);
+          await logAdaptationDebug("ui_component_replaced", {
+            requestId,
+            previewId,
+            nextComponentId: saveResponse.component.id,
+            renderedHtml: truncateDebugString(saveResponse.component.html),
+            renderedCssText: truncateDebugString(saveResponse.component.cssText ?? "")
+          });
           syncInsertedState();
           registry.setMagicState(previewId, "success");
         }
@@ -542,4 +580,36 @@ function isApplySavedPreviewMessage(message: {
     return false;
   }
   return typeof Reflect.get(message.payload, "previewId") === "string";
+}
+
+function createAdaptationRequestId(): string {
+  if (typeof crypto?.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `adapt-${Date.now()}`;
+}
+
+async function logAdaptationDebug(event: string, payload: Record<string, unknown>): Promise<void> {
+  if (!__DEBUG__) {
+    return;
+  }
+  console.info(`[spectra][adapt][content][${event}]`, payload);
+}
+
+function truncateDebugString(value: string): string {
+  if (value.length <= MAX_DEBUG_LOG_CHARS) {
+    return value;
+  }
+  return `${value.slice(0, MAX_DEBUG_LOG_CHARS)}… [truncated ${value.length - MAX_DEBUG_LOG_CHARS} chars]`;
+}
+
+function truncateDebugValue<T>(value: T): T | string {
+  const serialized = JSON.stringify(value);
+  if (!serialized) {
+    return value;
+  }
+  if (serialized.length <= MAX_DEBUG_LOG_CHARS) {
+    return value;
+  }
+  return truncateDebugString(serialized);
 }

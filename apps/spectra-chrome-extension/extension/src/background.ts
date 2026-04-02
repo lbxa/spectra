@@ -40,6 +40,8 @@ type Bounds = {
   height: number;
 };
 
+declare const __DEBUG__: boolean;
+
 type BackgroundServices = {
   repository: typeof libraryRepository;
   libraryApplicationService: LibraryApplicationService;
@@ -204,14 +206,30 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   }
 
   if (message.type === "ADAPT_COMPONENT") {
+    void logAdaptBackgroundDebug("request_received", {
+      requestId: message.payload.requestId ?? "none",
+      componentHtmlLength: message.payload.componentPack.normalizedHtml.length,
+      componentCssLength: message.payload.componentPack.baseCss.length,
+      targetUrl: message.payload.targetSiteContext.metadata.pageUrl
+    });
     backgroundServices.requestAdaptationFromBackend(message.payload)
-      .then((patch) =>
+      .then((patch) => {
+        void logAdaptBackgroundDebug("request_succeeded", {
+          requestId: message.payload.requestId ?? "none",
+          summary: patch.summary,
+          confidence: patch.confidence,
+          warningCount: patch.warnings.length
+        });
         sendResponse({
           ok: true,
           patch
-        } satisfies AdaptComponentResponse)
-      )
+        } satisfies AdaptComponentResponse);
+      })
       .catch((error: unknown) => {
+        void logAdaptBackgroundDebug("request_failed", {
+          requestId: message.payload.requestId ?? "none",
+          error: error instanceof Error ? error.message : "Unable to adapt component"
+        });
         sendResponse({
           ok: false,
           error: error instanceof Error ? error.message : "Unable to adapt component"
@@ -397,6 +415,13 @@ function validatePayload(payload: SaveComponentPayload): void {
   if (!payload.sourceHostSignature || typeof payload.sourceHostSignature !== "object") {
     throw new Error("Missing host signature.");
   }
+}
+
+async function logAdaptBackgroundDebug(event: string, payload: Record<string, unknown>): Promise<void> {
+  if (!__DEBUG__) {
+    return;
+  }
+  console.info(`[spectra][adapt][background-main][${event}]`, payload);
 }
 
 async function cropScreenshotToBounds(

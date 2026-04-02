@@ -3,8 +3,8 @@
   "private": true,
   "scripts": {
     "clean": "rm -rf dist",
-    "build:background": "bun build extension/src/background.ts --outfile dist/background.js --target browser --format iife",
-    "build:content": "bun build extension/src/content.ts --outfile dist/content.js --target browser --format iife",
+    "build:background": "bun build extension/src/background.ts --outfile dist/background.js --target browser --format iife --define __DEBUG__=${SPECTRA_DEBUG:-false}",
+    "build:content": "bun build extension/src/content.ts --outfile dist/content.js --target browser --format iife --define __DEBUG__=${SPECTRA_DEBUG:-false}",
     "build:preview": "bunx vite build --config vite.preview.config.ts",
     "build:popup": "bunx vite build --config vite.popup.config.ts",
     "build": "bun run clean && bun run build:background && bun run build:content && bun run build:preview && bun run build:popup",

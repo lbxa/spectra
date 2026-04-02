@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -12,6 +13,7 @@ type Config struct {
 	OpenAIAPIKey   string
 	OpenAIModel    string
 	RequestTimeout time.Duration
+	AdaptDebug     bool
 }
 
 func Load() (Config, error) {
@@ -20,6 +22,7 @@ func Load() (Config, error) {
 		OpenAIAPIKey:   os.Getenv("OPENAI_API_KEY"),
 		OpenAIModel:    getEnv("OPENAI_MODEL", "gpt-4.1"),
 		RequestTimeout: time.Duration(getEnvInt("REQUEST_TIMEOUT_MS", 45000)) * time.Millisecond,
+		AdaptDebug:     getEnvBool("SPECTRA_ADAPT_DEBUG", false),
 	}
 
 	if cfg.OpenAIAPIKey == "" {
@@ -46,4 +49,19 @@ func getEnvInt(key string, fallback int) int {
 		return fallback
 	}
 	return value
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	raw := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	if raw == "" {
+		return fallback
+	}
+	switch raw {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
 }

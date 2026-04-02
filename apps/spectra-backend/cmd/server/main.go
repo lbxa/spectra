@@ -28,9 +28,11 @@ func main() {
 		cfg.OpenAIAPIKey,
 		cfg.OpenAIModel,
 		cfg.RequestTimeout,
+		logger,
+		cfg.AdaptDebug,
 	)
 	validator := adapt.NewValidator(20000)
-	service := adapt.NewService(openAIClient, validator, logger)
+	service := adapt.NewService(openAIClient, validator, logger, cfg.AdaptDebug)
 	router := serverhttp.NewRouter(logger, service)
 
 	server := &http.Server{
@@ -40,7 +42,7 @@ func main() {
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      20 * time.Second,
 	}
-	logger.Info("server_starting", "addr", server.Addr, "route", "POST /v1/adapt")
+	logger.Info("server_starting", "addr", server.Addr, "route", "POST /v1/adapt", "adapt_debug", cfg.AdaptDebug)
 
 	go func() {
 		if listenErr := server.ListenAndServe(); listenErr != nil && listenErr != http.ErrServerClosed {

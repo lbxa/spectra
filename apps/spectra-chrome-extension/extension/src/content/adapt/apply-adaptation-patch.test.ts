@@ -9,6 +9,18 @@ describe("applyAdaptationPatch", () => {
       baseCss: ":scope button{color:black;}",
       stableNodeIds: ["node-1"],
       semanticRoleHint: "button",
+      componentIntentSummary: {
+        semanticRole: "button",
+        emphasisLevel: "balanced",
+        headingScale: 1,
+        dominantWeight: 500,
+        bodyWeight: 400,
+        hasSurfaceBackground: false,
+        hasSurfaceBorder: false,
+        hasSurfaceShadow: false,
+        cornerStyle: "sharp",
+        colorIntent: "neutral"
+      },
       protectedNodeIds: ["node-1"],
       wrapperRootId: "root"
     };

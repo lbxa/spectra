@@ -25,7 +25,7 @@ func (s *stubClient) Adapt(context.Context, llm.Prompt) (models.AdaptationPatch,
 
 func TestPostAdaptBadRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	handler := NewAdaptHandler(adapt.NewService(&stubClient{}, adapt.NewValidator(2000), slog.Default()))
+	handler := NewAdaptHandler(adapt.NewService(&stubClient{}, adapt.NewValidator(2000), slog.Default(), false), slog.Default())
 	router := gin.New()
 	router.POST("/v1/adapt", handler.PostAdapt)
 
@@ -48,17 +48,38 @@ func TestPostAdaptSuccess(t *testing.T) {
 			Confidence:  0.9,
 		},
 	}
-	handler := NewAdaptHandler(adapt.NewService(client, adapt.NewValidator(2000), slog.Default()))
+	handler := NewAdaptHandler(adapt.NewService(client, adapt.NewValidator(2000), slog.Default(), false), slog.Default())
 	router := gin.New()
 	router.POST("/v1/adapt", handler.PostAdapt)
 
 	payload := models.AdaptRequest{
 		TargetSiteContext: models.TargetSiteContext{
-			URL: "https://example.com",
+			URL:              "https://example.com",
+			RootSelector:     "section",
+			ProtectedNodeIDs: []string{"node-1"},
+			HostSceneSummary: models.HostSceneSummary{
+				Typography: models.HostSceneTypography{
+					BodyFontFamily:    "Inter",
+					BodyFontSizePx:    16,
+					CommonFontWeights: []int{400, 500},
+				},
+				Density: models.HostSceneDensity{
+					Compactness: "balanced",
+				},
+			},
 		},
 		ComponentPack: models.ComponentPack{
 			ComponentID: "cmp-1",
 			HTML:        "<button>Buy</button>",
+			ComponentIntentSummary: models.ComponentIntentSummary{
+				SemanticRole:   "interactive",
+				EmphasisLevel:  "balanced",
+				HeadingScale:   1.1,
+				DominantWeight: 500,
+				BodyWeight:     400,
+				CornerStyle:    "rounded",
+				ColorIntent:    "accent",
+			},
 		},
 	}
 	body, _ := json.Marshal(payload)
