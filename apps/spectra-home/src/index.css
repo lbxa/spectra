@@ -193,3 +193,52 @@ details summary .faq-icon {
 details[open] summary .faq-icon {
   transform: rotate(45deg);
 }
+
+@keyframes magic-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes magic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(100, 170, 255, 0); }
+  50%      { box-shadow: 0 0 20px 4px rgba(100, 170, 255, 0.18); }
+}
+
+.magic-btn {
+  position: relative;
+  display: inline-flex;
+  padding: 1.5px;
+  border-radius: calc(var(--radius-lg) + 1.5px);
+  cursor: pointer;
+}
+
+.magic-btn-ray {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.magic-btn-ray::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    transparent 50%,
+    rgba(180, 210, 255, 0.15) 62%,
+    rgba(140, 190, 255, 0.4) 70%,
+    rgba(120, 180, 255, 0.7) 76%,
+    rgba(255, 255, 255, 0.9) 80%,
+    rgba(120, 180, 255, 0.7) 84%,
+    rgba(140, 190, 255, 0.4) 90%,
+    rgba(180, 210, 255, 0.15) 96%,
+    transparent 100%
+  );
+  animation: magic-spin 3s linear infinite;
+}
+
+.magic-btn > [data-slot="button"] {
+  animation: magic-pulse 3s ease-in-out infinite;
+}

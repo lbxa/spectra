@@ -4,6 +4,7 @@
   "compilerOptions": {
     "module": "ESNext",
     "target": "ESNext",
+    "jsx": "react-jsx",
     "lib": ["ESNext", "DOM"],
     "moduleResolution": "bundler",
     "outDir": "./dist",

@@ -1,7 +1,9 @@
 import { LoadingTermPill } from "@/components/LoadingTermPill"
-import { MiniOrb } from "@/components/MiniOrb"
+import { ArrowUpRight } from "lucide-react"
+import { MiniOrb } from "@spectra/orb"
 import { Navbar } from "@/components/Navbar"
 import { Button } from "@/components/ui/button"
+import chromeLogo from "@/assets/chrome.svg"
 
 function App() {
   return (
@@ -10,9 +12,9 @@ function App() {
         <div className="flex h-full items-center justify-center">
           <div className="opacity-90">
             <MiniOrb sizePx={360} className="block sm:hidden" />
-            <MiniOrb sizePx={460} className="hidden sm:block md:hidden" />
-            <MiniOrb sizePx={560} className="hidden md:block lg:hidden" />
-            <MiniOrb sizePx={680} className="hidden lg:block" />
+            <MiniOrb sizePx={560} className="hidden sm:block md:hidden" />
+            <MiniOrb sizePx={660} className="hidden md:block lg:hidden" />
+            <MiniOrb sizePx={800} className="hidden lg:block" />
           </div>
         </div>
         <div className="pointer-events-none absolute inset-0 bg-white/70" />
@@ -30,12 +32,32 @@ function App() {
             Design interactions in code and ship polished previews in minutes. Spectra helps product
             engineers present motion, states, and intent without slowing down delivery.
           </p>
-          <div className="animate-fade-up mt-10 flex flex-wrap gap-3 delay-300">
-            <Button size="lg">Start building</Button>
-            <Button size="lg" variant="secondary">
+          <div className="animate-fade-up mt-10 flex flex-wrap items-center gap-3 delay-300">
+            <div className="magic-btn">
+              <div className="magic-btn-ray" aria-hidden="true" />
+              <Button size="lg" className="relative z-10 cursor-pointer">
+                <span className="inline-flex items-center gap-2">
+                  <img src={chromeLogo} alt="" aria-hidden="true" className="h-4 w-4 shrink-0" />
+                  Start building
+                  <ArrowUpRight className="h-4 w-4 shrink-0" aria-hidden="true" />
+                </span>
+              </Button>
+            </div>
+            <Button size="lg" variant="outline" className="cursor-pointer">
               Watch demo
             </Button>
           </div>
+          {/* <button
+            type="button"
+            className="animate-fade-up mt-4 inline-block cursor-pointer rounded-lg transition-transform duration-200 hover:scale-[1.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            aria-label="Available in the Chrome Web Store"
+          >
+            <img
+              src={chromeWebStoreButton}
+              alt="Available in the Chrome Web Store"
+              className="h-auto w-[200px] max-w-full"
+            />
+          </button> */}
         </section>
 
         <section className="mx-auto w-full max-w-7xl px-6 py-24 md:py-28" id="demo">
@@ -250,9 +272,14 @@ function App() {
           </div>
         </section>
 
-        <footer className="border-t border-border">
+        <footer className="border-t border-border bg-black text-neutral-200">
+          <div className="mx-auto w-full max-w-6xl px-6 py-12 text-center sm:py-16 md:py-20">
+            <blockquote className="font-display text-[clamp(3rem,10vw,10rem)] leading-none tracking-tight text-neutral-200">
+              Show Don&apos;t <i>Tell</i>
+            </blockquote>
+          </div>
           <div className="mx-auto grid w-full max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-4 px-6 py-4">
-            <p className="text-[0.625rem] md:text-xs text-muted-foreground">
+            <p className="text-[0.55rem] md:text-[0.65rem] text-neutral-200">
               &copy; {new Date().getFullYear()} Spectra. All rights reserved.
             </p>
             <button
@@ -269,7 +296,7 @@ function App() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="X (Twitter)"
-                className="text-muted-foreground transition-colors hover:text-foreground"
+                className="text-neutral-200 transition-colors hover:text-white"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" className="size-4">
                   <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -280,7 +307,7 @@ function App() {
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="LinkedIn"
-                className="text-muted-foreground transition-colors hover:text-foreground"
+                className="text-neutral-200 transition-colors hover:text-white"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" className="size-4">
                   <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />

@@ -14,15 +14,17 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc",
+    "build": "tsc && mkdir -p dist/lib/MiniOrb && cp src/lib/MiniOrb/*.css dist/lib/MiniOrb/",
     "dev": "tsc --watch"
   },
   "dependencies": {
     "@spectra/tsconfig": "workspace:*",
+    "react": "^19.2.4",
     "three": "^0.183.2"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",
+    "@types/react": "^19.2.4",
     "@types/three": "^0.183.1",
     "typescript": "^5.7.3"
   }

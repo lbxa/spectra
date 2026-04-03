@@ -118,10 +118,12 @@
       "version": "1.0.0",
       "dependencies": {
         "@spectra/tsconfig": "workspace:*",
+        "react": "^19.2.4",
         "three": "^0.183.2",
       },
       "devDependencies": {
         "@types/node": "^22.7.5",
+        "@types/react": "^19.2.4",
         "@types/three": "^0.183.1",
         "typescript": "^5.7.3",
       },

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Menu, X } from "lucide-react"
+import { MiniOrb } from "@spectra/orb"
 import { cn } from "@/lib/utils"
-import { MiniOrb } from "./MiniOrb"
 
 const LINKS = [
   { label: "Demo", href: "#demo" },
@@ -191,9 +191,8 @@ export function Navbar() {
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center text-xs text-muted-foreground">
+                <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
                   <span>Show don&apos;t tell</span>
-                  <span className="text-center">Launching 2026</span>
                   <span className="flex items-center justify-self-end gap-1.5">
                     Beta
                     <span className="size-1.5 rounded-full bg-sky-500" />
