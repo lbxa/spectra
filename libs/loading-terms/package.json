@@ -1,8 +1,7 @@
 {
-  "name": "@spectra/orbdeps",
+  "name": "@spectra/loading-terms",
   "version": "1.0.0",
   "license": "UNLICENSED",
-  "private": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -16,9 +15,13 @@
     "build": "tsc",
     "dev": "tsc --watch"
   },
+  "files": [
+    "dist",
+    "words.json"
+  ],
+  "private": true,
   "dependencies": {
-    "@spectra/tsconfig": "workspace:*",
-    "@radix-ui/react-slot": "^1.2.4"
+    "@spectra/tsconfig": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",
