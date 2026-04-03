@@ -113,7 +113,7 @@ export function Navbar() {
             <button
               type="button"
               onClick={scrollToTop}
-              className="cursor-pointer text-3xl font-display tracking-tight select-none"
+              className="cursor-pointer text-2xl font-sans font-semibold tracking-tighter select-none"
             >
               Spectra
             </button>
