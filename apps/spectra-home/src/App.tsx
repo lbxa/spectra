@@ -1,7 +1,6 @@
 import { LoadingTermPill } from "@/components/LoadingTermPill"
 import { MiniOrb } from "@/components/MiniOrb"
 import { Navbar } from "@/components/Navbar"
-import { Orb } from "@/components/Orb"
 import { Button } from "@/components/ui/button"
 
 function App() {
@@ -9,16 +8,12 @@ function App() {
     <div className="relative min-h-screen bg-transparent text-foreground">
       <div className="fixed inset-0 z-0 overflow-hidden">
         <div className="flex h-full items-center justify-center">
-          <Orb
-            className="h-96 w-96 opacity-90 sm:h-120 sm:w-120 md:h-160 md:w-160 lg:h-208 lg:w-208"
-            particleCount={420}
-            theme={{
-              baseColor: "#0b6eea",
-              highlightColor: "#7acbff",
-              coreGlowColor: "#1a8cff",
-              particleColor: "#8fd7ff"
-            }}
-          />
+          <div className="opacity-90">
+            <MiniOrb sizePx={360} className="block sm:hidden" />
+            <MiniOrb sizePx={460} className="hidden sm:block md:hidden" />
+            <MiniOrb sizePx={560} className="hidden md:block lg:hidden" />
+            <MiniOrb sizePx={680} className="hidden lg:block" />
+          </div>
         </div>
         <div className="pointer-events-none absolute inset-0 bg-white/70" />
       </div>
