@@ -61,8 +61,8 @@ function App() {
           </p>
           <h2 className="mb-12 font-display text-3xl tracking-tight md:text-5xl">Features</h2>
           <div className="grid gap-4 md:grid-cols-3">
-            <article className="overflow-hidden rounded-2xl border border-border bg-white/80 shadow-sm transition-all hover:-translate-y-0.5 hover:border-muted-foreground/30">
-              <div className="aspect-[4/3] w-full bg-muted/40">
+            <article className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:border-muted-foreground/30">
+              <div className="aspect-[4/3] w-full bg-linear-to-br from-blue-500/20 via-cyan-400/10 to-indigo-500/20">
                 <div className="grid h-full place-content-center text-xs text-muted-foreground">
                   Screenshot placeholder
                 </div>
@@ -74,8 +74,8 @@ function App() {
                 </p>
               </div>
             </article>
-            <article className="overflow-hidden rounded-2xl border border-border bg-white/80 shadow-sm transition-all hover:-translate-y-0.5 hover:border-muted-foreground/30">
-              <div className="aspect-[4/3] w-full bg-muted/40">
+            <article className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:border-muted-foreground/30">
+              <div className="aspect-[4/3] w-full bg-linear-to-br from-blue-500/20 via-cyan-400/10 to-indigo-500/20">
                 <div className="grid h-full place-content-center text-xs text-muted-foreground">
                   Screenshot placeholder
                 </div>
@@ -87,8 +87,8 @@ function App() {
                 </p>
               </div>
             </article>
-            <article className="overflow-hidden rounded-2xl border border-border bg-white/80 shadow-sm transition-all hover:-translate-y-0.5 hover:border-muted-foreground/30">
-              <div className="aspect-[4/3] w-full bg-muted/40">
+            <article className="overflow-hidden rounded-2xl border border-border bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:border-muted-foreground/30">
+              <div className="aspect-[4/3] w-full bg-linear-to-br from-blue-500/20 via-cyan-400/10 to-indigo-500/20">
                 <div className="grid h-full place-content-center text-xs text-muted-foreground">
                   Screenshot placeholder
                 </div>
@@ -169,6 +169,87 @@ function App() {
               </summary>
               <p className="pb-6 text-sm leading-relaxed text-muted-foreground">
                 Yes, the starter tier is available for individual developers to try the product.
+              </p>
+            </details>
+            <details className="group border-b border-border">
+              <summary className="flex cursor-pointer items-center justify-between py-6 text-base font-medium transition-colors hover:text-primary">
+                What is Spectra and who is it for?
+                <span className="faq-icon ml-4 flex size-7 shrink-0 items-center justify-center rounded-lg border border-border text-lg text-muted-foreground">+</span>
+              </summary>
+              <p className="pb-6 text-sm leading-relaxed text-muted-foreground">
+                Spectra is an interaction-design tool built for product engineers and frontend developers. It lets you prototype motion, states, and interactive behavior directly in code and share production-fidelity previews with your team — without switching to a separate design tool.
+              </p>
+            </details>
+            <details className="group border-b border-border">
+              <summary className="flex cursor-pointer items-center justify-between py-6 text-base font-medium transition-colors hover:text-primary">
+                How is Spectra different from Figma or Storybook?
+                <span className="faq-icon ml-4 flex size-7 shrink-0 items-center justify-center rounded-lg border border-border text-lg text-muted-foreground">+</span>
+              </summary>
+              <p className="pb-6 text-sm leading-relaxed text-muted-foreground">
+                Figma is great for static visual design and Storybook excels at component documentation, but neither captures real interaction behavior. Spectra focuses on the gap between them: prototyping animations, transitions, and stateful flows in actual code so what you preview is what you ship.
+              </p>
+            </details>
+            <details className="group border-b border-border">
+              <summary className="flex cursor-pointer items-center justify-between py-6 text-base font-medium transition-colors hover:text-primary">
+                What frameworks and libraries does Spectra support?
+                <span className="faq-icon ml-4 flex size-7 shrink-0 items-center justify-center rounded-lg border border-border text-lg text-muted-foreground">+</span>
+              </summary>
+              <p className="pb-6 text-sm leading-relaxed text-muted-foreground">
+                Spectra works with modern frontend stacks including React, Next.js, Vue, Svelte, and vanilla HTML/CSS/JS. It integrates into your existing toolchain through a lightweight browser extension and does not require you to adopt a new framework.
+              </p>
+            </details>
+            <details className="group border-b border-border">
+              <summary className="flex cursor-pointer items-center justify-between py-6 text-base font-medium transition-colors hover:text-primary">
+                Do I need design skills to use Spectra?
+                <span className="faq-icon ml-4 flex size-7 shrink-0 items-center justify-center rounded-lg border border-border text-lg text-muted-foreground">+</span>
+              </summary>
+              <p className="pb-6 text-sm leading-relaxed text-muted-foreground">
+                No. Spectra is built for engineers, not designers. If you can write frontend code, you can use Spectra to capture, tune, and share interactive previews without any design tool experience.
+              </p>
+            </details>
+            <details className="group border-b border-border">
+              <summary className="flex cursor-pointer items-center justify-between py-6 text-base font-medium transition-colors hover:text-primary">
+                Can I share previews with non-technical stakeholders?
+                <span className="faq-icon ml-4 flex size-7 shrink-0 items-center justify-center rounded-lg border border-border text-lg text-muted-foreground">+</span>
+              </summary>
+              <p className="pb-6 text-sm leading-relaxed text-muted-foreground">
+                Yes. Spectra previews are shareable links that render in any modern browser. Product managers, designers, and clients can review interactive behavior without installing anything or reading code.
+              </p>
+            </details>
+            <details className="group border-b border-border">
+              <summary className="flex cursor-pointer items-center justify-between py-6 text-base font-medium transition-colors hover:text-primary">
+                What kind of interactions can I prototype with Spectra?
+                <span className="faq-icon ml-4 flex size-7 shrink-0 items-center justify-center rounded-lg border border-border text-lg text-muted-foreground">+</span>
+              </summary>
+              <p className="pb-6 text-sm leading-relaxed text-muted-foreground">
+                Anything you can build in the browser: hover states, page transitions, scroll-driven animations, drag interactions, loading sequences, multi-step flows, and responsive layout behavior. Spectra captures the real DOM so the preview matches what users will see.
+              </p>
+            </details>
+            <details className="group border-b border-border">
+              <summary className="flex cursor-pointer items-center justify-between py-6 text-base font-medium transition-colors hover:text-primary">
+                How long does it take to get started?
+                <span className="faq-icon ml-4 flex size-7 shrink-0 items-center justify-center rounded-lg border border-border text-lg text-muted-foreground">+</span>
+              </summary>
+              <p className="pb-6 text-sm leading-relaxed text-muted-foreground">
+                Most teams are capturing their first preview within minutes. Install the browser extension, open your app in development, and start selecting the interactions you want to share. There is no project configuration or build step required.
+              </p>
+            </details>
+            <details className="group border-b border-border">
+              <summary className="flex cursor-pointer items-center justify-between py-6 text-base font-medium transition-colors hover:text-primary">
+                Can Spectra replace my current prototyping tool?
+                <span className="faq-icon ml-4 flex size-7 shrink-0 items-center justify-center rounded-lg border border-border text-lg text-muted-foreground">+</span>
+              </summary>
+              <p className="pb-6 text-sm leading-relaxed text-muted-foreground">
+                Spectra is designed to complement your workflow, not replace everything. It is ideal when you need to show how something works — animations, transitions, interactive states — rather than how it looks statically. Many teams use Spectra alongside Figma or Sketch.
+              </p>
+            </details>
+            <details className="group border-b border-border">
+              <summary className="flex cursor-pointer items-center justify-between py-6 text-base font-medium transition-colors hover:text-primary">
+                Is Spectra open source?
+                <span className="faq-icon ml-4 flex size-7 shrink-0 items-center justify-center rounded-lg border border-border text-lg text-muted-foreground">+</span>
+              </summary>
+              <p className="pb-6 text-sm leading-relaxed text-muted-foreground">
+                The core capture engine and browser extension are source-available. The collaboration and team features in the Pro tier are proprietary. Check the repository for the current license terms.
               </p>
             </details>
           </div>
