@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { createOrbScene } from "../lib/orb-scene";
+import { createOrbScene } from "@spectra/orb";
 
 export function Orb() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -13,7 +13,8 @@ export function Orb() {
     const scene = createOrbScene({
       container,
       width: container.clientWidth,
-      height: container.clientHeight
+      height: container.clientHeight,
+      bloom: false
     });
     scene.start();
 

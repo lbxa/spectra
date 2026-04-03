@@ -1,0 +1,29 @@
+{
+  "name": "@spectra/orb",
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@spectra/tsconfig": "workspace:*",
+    "three": "^0.183.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "@types/three": "^0.183.1",
+    "typescript": "^5.7.3"
+  }
+}

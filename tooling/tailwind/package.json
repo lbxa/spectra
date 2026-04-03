@@ -1,0 +1,22 @@
+{
+  "name": "@spectra/tailwind",
+  "description": "Tailwind CSS configuration for the Spectra platform",
+  "version": "1.0.0",
+  "dependencies": {
+    "postcss": "^8.4.38",
+    "tailwindcss": "3.4.4"
+  },
+  "devDependencies": {
+    "@spectra/tsconfig": "workspace:*",
+    "typescript": "^5.7.3"
+  },
+  "exports": {
+    "./base": "./base.ts"
+  },
+  "license": "ISC",
+  "repository": "lbxa/spectra.git",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "type": "module"
+}

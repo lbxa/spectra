@@ -1,75 +1,24 @@
-# React + TypeScript + Vite
+# spectra-home
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Clean React + Vite baseline for Spectra Home.
 
-Currently, two official plugins are available:
+## Included
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Tailwind CSS v4 via `@tailwindcss/vite`
+- shadcn/ui initialized for Vite
+- `@/*` alias mapped to `src/*`
 
-## React Compiler
+## Commands
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+- `bun run dev`
+- `bun run build`
+- `bun run lint`
 
-Note: This will impact Vite dev & build performances.
+## Orb Rendering Learnings
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- `UnrealBloomPass` with a single `EffectComposer` can introduce dark/opaque backdrop artifacts in transparent, clipped orb containers.
+- To keep bloom while preserving transparency, use an alpha-safe dual-composer flow:
+  - render bloom offscreen (`bloomComposer`)
+  - composite in a final pass with a `ShaderPass` that preserves base alpha (`vec4(base.rgb + bloom.rgb * strength, base.a)`).
+- Keep popup usage on `bloom: false` as a safe containment path for small icon surfaces.
+- Home can keep bloom enabled after alpha-safe composition is in place.

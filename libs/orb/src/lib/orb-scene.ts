@@ -3,7 +3,6 @@ import {
   AmbientLight,
   BufferAttribute,
   BufferGeometry,
-  Timer,
   Color,
   Group,
   HemisphereLight,
@@ -17,28 +16,56 @@ import {
   Scene,
   ShaderMaterial,
   SphereGeometry,
+  Timer,
   Uniform,
+  Vector2,
   Vector3,
   WebGLRenderer
 } from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+
+export interface OrbSceneTheme {
+  baseColor: string;
+  highlightColor: string;
+  coreGlowColor: string;
+  particleColor: string;
+}
 
 export interface OrbSceneOptions {
   container: HTMLElement;
   width?: number;
   height?: number;
+  theme?: Partial<OrbSceneTheme>;
+  particleCount?: number;
+  bloom?: boolean;
 }
 
 export interface OrbSceneHandle {
   start(): void;
   pulse(strength?: number): void;
+  setPointer(x: number, y: number): void;
+  clearPointer(): void;
+  setScrollRotation(yRotation: number): void;
   resize(width: number, height: number): void;
   dispose(): void;
 }
 
-const BASE_BLUE = new Color("#4d9dff");
-const HIGHLIGHT_BLUE = new Color("#b6e7ff");
-const CORE_GLOW_BLUE = new Color("#78c5ff");
-const PARTICLE_BLUE = new Color("#ccefff");
+interface ResolvedOrbSceneTheme {
+  baseColor: Color;
+  highlightColor: Color;
+  coreGlowColor: Color;
+  particleColor: Color;
+}
+
+const DEFAULT_THEME: OrbSceneTheme = {
+  baseColor: "#4d9dff",
+  highlightColor: "#b6e7ff",
+  coreGlowColor: "#78c5ff",
+  particleColor: "#ccefff"
+};
 
 interface OrbUniforms {
   [uniform: string]: IUniform<unknown>;
@@ -111,14 +138,14 @@ const vertexShader = /* glsl */ `
   }
 
   void main() {
-    float noiseScale = 1.15;
-    float time = uTime * 0.6;
+    float noiseScale = 1.2;
+    float time = uTime * 0.4;
     float displacement = snoise(normal * noiseScale + time) * 0.12;
-    float fineRipples = snoise(normal * 5.8 + time * 1.9) * 0.022;
+    float fineRipples = snoise(normal * 6.0 + time * 1.8) * 0.025;
     float radial = length(position.xy);
-    float wave = sin(radial * 6.0 - time * 2.7 + uSpectrumTilt * 1.8) * 0.05;
-    float bassPush = uBassAmplitude * 0.4;
-    float spectrumLean = uSpectrumTilt * 0.1;
+    float wave = sin(radial * 6.0 - time * 3.0 + uSpectrumTilt * 2.0) * 0.05;
+    float bassPush = uBassAmplitude * 0.45;
+    float spectrumLean = uSpectrumTilt * 0.12;
     float surfaceFlow = displacement + fineRipples + wave;
     vec3 warpedPosition = position + normal * (surfaceFlow + bassPush + spectrumLean);
     vec4 mvPosition = modelViewMatrix * vec4(warpedPosition, 1.0);
@@ -139,14 +166,14 @@ const fragmentShader = /* glsl */ `
 
   void main() {
     vec3 viewDir = normalize(-vPosition);
-    float fresnel = pow(1.0 - dot(vNormal, viewDir), 2.3);
-    float specular = pow(max(dot(reflect(-viewDir, vNormal), vec3(0.0, 1.0, 0.5)), 0.0), 26.0);
+    float fresnel = pow(1.0 - dot(vNormal, viewDir), 2.4);
+    float specular = pow(max(dot(reflect(-viewDir, vNormal), vec3(0.0, 1.0, 0.5)), 0.0), 32.0);
     float rippleTint = clamp(vRipple * 4.0 + 0.5, 0.0, 1.0);
-    float depthFade = pow(1.0 - clamp(length(vPosition.xy) / 2.3, 0.0, 1.0), 1.4);
-    float glow = mix(0.56, 1.05, uAmplitude);
+    float depthFade = pow(1.0 - clamp(length(vPosition.xy) / 2.6, 0.0, 1.0), 1.4);
+    float glow = mix(0.5, 1.1, uAmplitude);
     vec3 color = mix(uBaseColor, uHighlightColor, fresnel + rippleTint * 0.35);
     color += vec3(0.08, 0.11, 0.2) * specular;
-    color *= (depthFade + fresnel * 1.3) * glow;
+    color *= (depthFade + fresnel * 1.35) * glow;
     gl_FragColor = vec4(color, 1.0);
   }
 `;
@@ -163,9 +190,31 @@ const shellFragmentShader = /* glsl */ `
     float fresnel = pow(1.0 - dot(vNormal, normalize(-vPosition)), 3.0);
     float rim = mix(0.4, 1.0, fresnel);
     float rippleEdge = clamp(vRipple * 4.0 + 0.5, 0.0, 1.0);
-    float opacity = mix(0.14, 0.34, uAmplitude + fresnel * 0.5 + rippleEdge * 0.15);
+    float opacity = mix(0.15, 0.38, uAmplitude + fresnel * 0.5 + rippleEdge * 0.15);
     vec3 color = mix(uBaseColor, uHighlightColor, rim + rippleEdge * 0.2);
     gl_FragColor = vec4(color * (rim + uAmplitude), opacity);
+  }
+`;
+
+const bloomMixVertexShader = /* glsl */ `
+  varying vec2 vUv;
+
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const bloomMixFragmentShader = /* glsl */ `
+  uniform sampler2D baseTexture;
+  uniform sampler2D bloomTexture;
+  uniform float bloomStrength;
+  varying vec2 vUv;
+
+  void main() {
+    vec4 base = texture2D(baseTexture, vUv);
+    vec3 bloom = texture2D(bloomTexture, vUv).rgb * bloomStrength;
+    gl_FragColor = vec4(base.rgb + bloom, base.a);
   }
 `;
 
@@ -174,6 +223,10 @@ class OrbController implements OrbSceneHandle {
   private readonly renderer: WebGLRenderer;
   private readonly scene: Scene;
   private readonly camera: PerspectiveCamera;
+  private readonly useBloom: boolean;
+  private readonly bloomComposer: EffectComposer | null;
+  private readonly finalComposer: EffectComposer | null;
+  private readonly bloomPass: UnrealBloomPass | null;
   private readonly timer: Timer;
   private readonly orbGroup: Group;
 
@@ -184,6 +237,9 @@ class OrbController implements OrbSceneHandle {
   private readonly coreMaterial: ShaderMaterial;
   private readonly shellMaterial: ShaderMaterial;
   private readonly particleMaterial: PointsMaterial;
+  private readonly particleBaseColor: Color;
+  private readonly coreUniforms: OrbUniforms;
+  private readonly shellUniforms: OrbUniforms;
 
   private frameId: number | null = null;
   private isRunning = false;
@@ -191,47 +247,92 @@ class OrbController implements OrbSceneHandle {
   private smoothedBass = 0.08;
   private smoothedTilt = 0;
   private pulseBoost = 0;
+  private readonly pointerTarget = new Vector2(0, 0);
+  private readonly pointerCurrent = new Vector2(0, 0);
+  private pointerEngagement = 0;
+  private pointerActive = false;
+  private autonomousRotationY = 0;
+  private scrollRotationTargetX = 0;
+  private scrollRotationCurrentX = 0;
 
   constructor(options: OrbSceneOptions) {
+    const theme = resolveTheme(options.theme);
+    const particleCount = Math.max(32, options.particleCount ?? 400);
+
     this.container = options.container;
     const width = options.width ?? Math.max(1, this.container.clientWidth || 34);
     const height = options.height ?? Math.max(1, this.container.clientHeight || 34);
 
     this.scene = new Scene();
     this.camera = new PerspectiveCamera(45, width / height, 0.1, 100);
-    this.camera.position.set(0, 0, 3.2);
+    this.camera.position.set(0, 0, 3.8);
+    this.useBloom = options.bloom ?? true;
 
     this.renderer = new WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(width, height);
     this.renderer.setClearColor(0x000000, 0);
     this.container.appendChild(this.renderer.domElement);
+    if (this.useBloom) {
+      const bloomRenderPass = new RenderPass(this.scene, this.camera);
+      bloomRenderPass.clearAlpha = 0;
+      this.bloomPass = new UnrealBloomPass(new Vector2(width, height), 0.82, 0.6, 0.74);
+      this.bloomComposer = new EffectComposer(this.renderer);
+      this.bloomComposer.renderToScreen = false;
+      this.bloomComposer.addPass(bloomRenderPass);
+      this.bloomComposer.addPass(this.bloomPass);
+
+      const finalRenderPass = new RenderPass(this.scene, this.camera);
+      finalRenderPass.clearAlpha = 0;
+      const mixPass = new ShaderPass(
+        new ShaderMaterial({
+          uniforms: {
+            baseTexture: new Uniform(null),
+            bloomTexture: new Uniform(this.bloomComposer.renderTarget2.texture),
+            bloomStrength: new Uniform(1)
+          },
+          vertexShader: bloomMixVertexShader,
+          fragmentShader: bloomMixFragmentShader
+        }),
+        "baseTexture"
+      );
+
+      this.finalComposer = new EffectComposer(this.renderer);
+      this.finalComposer.addPass(finalRenderPass);
+      this.finalComposer.addPass(mixPass);
+    } else {
+      this.bloomComposer = null;
+      this.finalComposer = null;
+      this.bloomPass = null;
+    }
 
     this.timer = new Timer();
     this.orbGroup = new Group();
     this.scene.add(this.orbGroup);
 
-    const orbUniforms: OrbUniforms = {
+    const coreUniforms: OrbUniforms = {
       uTime: new Uniform(0),
       uAmplitude: new Uniform(0.12),
       uBassAmplitude: new Uniform(0.08),
       uSpectrumTilt: new Uniform(0),
-      uBaseColor: new Uniform(BASE_BLUE.clone()),
-      uHighlightColor: new Uniform(CORE_GLOW_BLUE.clone())
+      uBaseColor: new Uniform(theme.baseColor.clone()),
+      uHighlightColor: new Uniform(theme.coreGlowColor.clone())
+    };
+    this.coreUniforms = coreUniforms;
+    this.shellUniforms = {
+      ...coreUniforms,
+      uBaseColor: new Uniform(theme.baseColor.clone()),
+      uHighlightColor: new Uniform(theme.highlightColor.clone())
     };
 
     this.coreMaterial = new ShaderMaterial({
-      uniforms: orbUniforms,
+      uniforms: this.coreUniforms,
       vertexShader,
       fragmentShader
     });
 
     this.shellMaterial = new ShaderMaterial({
-      uniforms: {
-        ...orbUniforms,
-        uBaseColor: new Uniform(BASE_BLUE.clone()),
-        uHighlightColor: new Uniform(HIGHLIGHT_BLUE.clone())
-      },
+      uniforms: this.shellUniforms,
       vertexShader,
       fragmentShader: shellFragmentShader,
       transparent: true,
@@ -239,21 +340,22 @@ class OrbController implements OrbSceneHandle {
       blending: AdditiveBlending
     });
 
+    this.particleBaseColor = theme.particleColor.clone();
     this.particleMaterial = new PointsMaterial({
-      size: 0.028,
-      color: PARTICLE_BLUE,
+      size: 0.035,
+      color: this.particleBaseColor,
       transparent: true,
-      opacity: 0.52,
+      opacity: 0.6,
       depthWrite: false,
       blending: AdditiveBlending
     });
 
-    this.coreGeometry = new SphereGeometry(0.79, 96, 96);
-    this.shellGeometry = new SphereGeometry(0.86, 96, 96);
+    this.coreGeometry = new SphereGeometry(0.79, 192, 192);
+    this.shellGeometry = new SphereGeometry(0.86, 192, 192);
     this.particleGeometry = new BufferGeometry();
 
-    this.setupSceneObjects();
-    this.setupLights();
+    this.setupSceneObjects(particleCount);
+    this.setupLights(theme);
   }
 
   public start(): void {
@@ -271,12 +373,37 @@ class OrbController implements OrbSceneHandle {
     this.camera.aspect = safeWidth / safeHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(safeWidth, safeHeight);
+    this.bloomComposer?.setSize(safeWidth, safeHeight);
+    this.finalComposer?.setSize(safeWidth, safeHeight);
+    this.bloomPass?.setSize(safeWidth, safeHeight);
   }
 
   public pulse(strength = 1): void {
     const normalizedStrength = MathUtils.clamp(strength, 0.25, 2);
     const randomMultiplier = MathUtils.lerp(0.82, 1.42, Math.random());
     this.pulseBoost = MathUtils.clamp(this.pulseBoost + normalizedStrength * 0.3 * randomMultiplier, 0, 1.2);
+  }
+
+  public setPointer(x: number, y: number): void {
+    const nextX = MathUtils.clamp(x, -1, 1);
+    const nextY = MathUtils.clamp(y, -1, 1);
+    const dx = nextX - this.pointerTarget.x;
+    const dy = nextY - this.pointerTarget.y;
+    const movementEnergy = Math.min(1, Math.sqrt(dx * dx + dy * dy));
+    this.pointerTarget.set(nextX, nextY);
+    this.pointerActive = true;
+    if (movementEnergy > 0.01) {
+      this.pulseBoost = MathUtils.clamp(this.pulseBoost + movementEnergy * 0.12, 0, 1.2);
+    }
+  }
+
+  public clearPointer(): void {
+    this.pointerTarget.set(0, 0);
+    this.pointerActive = false;
+  }
+
+  public setScrollRotation(yRotation: number): void {
+    this.scrollRotationTargetX = Number.isFinite(yRotation) ? yRotation : 0;
   }
 
   public dispose(): void {
@@ -296,14 +423,13 @@ class OrbController implements OrbSceneHandle {
     this.renderer.domElement.remove();
   }
 
-  private setupSceneObjects(): void {
+  private setupSceneObjects(particleCount: number): void {
     const core = new Mesh(this.coreGeometry, this.coreMaterial);
     this.orbGroup.add(core);
 
     const shell = new Mesh(this.shellGeometry, this.shellMaterial);
     this.orbGroup.add(shell);
 
-    const particleCount = 240;
     const positions = new Float32Array(particleCount * 3);
     for (let i = 0; i < particleCount; i += 1) {
       const direction = new Vector3().randomDirection();
@@ -316,12 +442,12 @@ class OrbController implements OrbSceneHandle {
     this.orbGroup.add(particles);
   }
 
-  private setupLights(): void {
-    const ambient = new AmbientLight("#7fb2ff", 0.7);
-    const fill = new HemisphereLight("#dff0ff", "#9ab6ff", 0.82);
-    const backLight = new PointLight("#3f7fff", 1.12, 12);
+  private setupLights(theme: ResolvedOrbSceneTheme): void {
+    const ambient = new AmbientLight(theme.highlightColor.clone().multiplyScalar(0.78), 0.74);
+    const fill = new HemisphereLight(theme.highlightColor, theme.baseColor.clone().multiplyScalar(0.82), 0.86);
+    const backLight = new PointLight(theme.baseColor, 1.3, 12);
     backLight.position.set(-3, 2, -2);
-    const keyLight = new PointLight("#8bc5ff", 0.95, 12);
+    const keyLight = new PointLight(theme.coreGlowColor, 1.08, 14);
     keyLight.position.set(3, 1.5, 2);
     this.scene.add(ambient);
     this.scene.add(fill);
@@ -335,9 +461,17 @@ class OrbController implements OrbSceneHandle {
     const delta = this.timer.getDelta();
     const elapsed = this.timer.getElapsed();
 
-    const targetAmplitude = 0.15 + Math.sin(elapsed * 1.15) * 0.03 + Math.sin(elapsed * 0.54) * 0.02;
-    const targetBass = 0.09 + Math.sin(elapsed * 0.88 + 0.9) * 0.025;
-    const targetTilt = Math.sin(elapsed * 0.36) * 0.26;
+    this.pointerEngagement = MathUtils.damp(this.pointerEngagement, this.pointerActive ? 1 : 0, 4.8, delta);
+    this.pointerCurrent.x = MathUtils.damp(this.pointerCurrent.x, this.pointerTarget.x, 6.5, delta);
+    this.pointerCurrent.y = MathUtils.damp(this.pointerCurrent.y, this.pointerTarget.y, 6.5, delta);
+    const pointerX = this.pointerCurrent.x * this.pointerEngagement;
+    const pointerY = this.pointerCurrent.y * this.pointerEngagement;
+    const pointerMagnitude = Math.min(1, Math.hypot(pointerX, pointerY));
+
+    const targetAmplitude =
+      0.15 + Math.sin(elapsed * 1.15) * 0.03 + Math.sin(elapsed * 0.54) * 0.02 + pointerMagnitude * 0.06;
+    const targetBass = 0.09 + Math.sin(elapsed * 0.88 + 0.9) * 0.025 + pointerMagnitude * 0.04;
+    const targetTilt = Math.sin(elapsed * 0.36) * 0.26 + pointerX * 0.55;
     const pulseAmplitude = this.pulseBoost * 0.2;
     const pulseBass = this.pulseBoost * 0.14;
     this.pulseBoost = MathUtils.damp(this.pulseBoost, 0, 4.6, delta);
@@ -345,44 +479,69 @@ class OrbController implements OrbSceneHandle {
     this.smoothedAmplitude = MathUtils.damp(this.smoothedAmplitude, targetAmplitude + pulseAmplitude, 2.4, delta);
     this.smoothedBass = MathUtils.damp(this.smoothedBass, targetBass + pulseBass, 2.1, delta);
     this.smoothedTilt = MathUtils.damp(this.smoothedTilt, targetTilt, 2.6, delta);
+    this.scrollRotationCurrentX = MathUtils.damp(
+      this.scrollRotationCurrentX,
+      this.scrollRotationTargetX,
+      5.8,
+      delta
+    );
 
     this.updateUniforms(elapsed, this.smoothedAmplitude, this.smoothedBass, this.smoothedTilt);
-    this.updateCamera(delta, this.smoothedTilt);
-    this.updateParticles(this.smoothedAmplitude, this.smoothedTilt, delta);
+    this.updateCamera(delta, this.smoothedTilt, pointerY);
+    this.updateParticles(this.smoothedAmplitude, this.smoothedTilt, pointerY, delta);
 
-    this.renderer.render(this.scene, this.camera);
+    if (this.useBloom && this.bloomComposer && this.finalComposer) {
+      this.bloomComposer.render();
+      this.finalComposer.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   };
 
   private updateUniforms(time: number, amplitude: number, bass: number, tilt: number): void {
-    this.coreMaterial.uniforms.uTime.value = time;
-    this.coreMaterial.uniforms.uAmplitude.value = amplitude;
-    this.coreMaterial.uniforms.uBassAmplitude.value = bass;
-    this.coreMaterial.uniforms.uSpectrumTilt.value = tilt;
+    this.coreUniforms.uTime.value = time;
+    this.coreUniforms.uAmplitude.value = amplitude;
+    this.coreUniforms.uBassAmplitude.value = bass;
+    this.coreUniforms.uSpectrumTilt.value = tilt;
 
-    this.shellMaterial.uniforms.uTime.value = time * 0.86;
-    this.shellMaterial.uniforms.uAmplitude.value = amplitude * 0.94;
-    this.shellMaterial.uniforms.uBassAmplitude.value = bass * 0.52;
-    this.shellMaterial.uniforms.uSpectrumTilt.value = tilt * 0.5;
+    this.shellUniforms.uTime.value = time * 0.86;
+    this.shellUniforms.uAmplitude.value = amplitude * 1.03;
+    this.shellUniforms.uBassAmplitude.value = bass * 0.52;
+    this.shellUniforms.uSpectrumTilt.value = tilt * 0.5;
+    if (this.bloomPass) {
+      this.bloomPass.strength = 0.78 + amplitude * 0.82;
+    }
   }
 
-  private updateCamera(delta: number, tilt: number): void {
+  private updateCamera(delta: number, tilt: number, pointerY: number): void {
     const targetX = tilt * 0.24;
-    const targetY = Math.sin(this.timer.getElapsed() * 0.42) * 0.08;
+    const targetY = Math.sin(this.timer.getElapsed() * 0.42) * 0.08 + pointerY * 0.2;
     this.camera.position.x = MathUtils.damp(this.camera.position.x, targetX, 3.2, delta);
     this.camera.position.y = MathUtils.damp(this.camera.position.y, targetY, 3.2, delta);
     this.camera.lookAt(0, 0, 0);
   }
 
-  private updateParticles(amplitude: number, tilt: number, delta: number): void {
-    const sizeBase = 0.028 + amplitude * 0.016;
+  private updateParticles(amplitude: number, tilt: number, pointerY: number, delta: number): void {
+    const sizeBase = 0.035 + amplitude * 0.02;
     this.particleMaterial.size = MathUtils.damp(this.particleMaterial.size, sizeBase, 4.8, delta);
-    const hueShift = MathUtils.clamp(0.08 * amplitude + tilt * 0.04, -0.18, 0.18);
-    const newColor = PARTICLE_BLUE.clone().offsetHSL(hueShift, 0, amplitude * 0.08);
+    const hueShift = MathUtils.clamp(0.1 * amplitude + tilt * 0.05, -0.2, 0.2);
+    const newColor = this.particleBaseColor.clone().offsetHSL(hueShift, 0, amplitude * 0.08);
     this.particleMaterial.color.copy(newColor);
-    this.particleMaterial.opacity = 0.4 + amplitude * 0.5;
-    this.orbGroup.rotation.y += delta * (0.12 + amplitude * 0.2);
-    this.orbGroup.rotation.x = Math.sin(this.timer.getElapsed() * 0.33) * 0.06;
+    this.particleMaterial.opacity = 0.42 + amplitude * 0.58;
+    this.autonomousRotationY += delta * (0.12 + amplitude * 0.2);
+    this.orbGroup.rotation.y = this.autonomousRotationY;
+    this.orbGroup.rotation.x =
+      Math.sin(this.timer.getElapsed() * 0.33) * 0.06 + pointerY * 0.08 + this.scrollRotationCurrentX;
   }
+}
+
+function resolveTheme(theme?: Partial<OrbSceneTheme>): ResolvedOrbSceneTheme {
+  return {
+    baseColor: new Color(theme?.baseColor ?? DEFAULT_THEME.baseColor),
+    highlightColor: new Color(theme?.highlightColor ?? DEFAULT_THEME.highlightColor),
+    coreGlowColor: new Color(theme?.coreGlowColor ?? DEFAULT_THEME.coreGlowColor),
+    particleColor: new Color(theme?.particleColor ?? DEFAULT_THEME.particleColor)
+  };
 }
 
 export function createOrbScene(options: OrbSceneOptions): OrbSceneHandle {

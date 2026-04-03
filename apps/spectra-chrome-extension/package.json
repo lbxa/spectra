@@ -1,5 +1,5 @@
 {
-  "name": "spectra",
+  "name": "@spectra/chrome-extension",
   "private": true,
   "scripts": {
     "clean": "rm -rf dist",
@@ -30,6 +30,7 @@
     "@radix-ui/react-scroll-area": "latest",
     "@radix-ui/react-select": "^2.2.6",
     "@radix-ui/react-slot": "latest",
+    "@spectra/orb": "workspace:*",
     "@xyflow/react": "^12.10.1",
     "class-variance-authority": "latest",
     "clsx": "latest",
