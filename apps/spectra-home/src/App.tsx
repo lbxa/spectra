@@ -143,7 +143,7 @@ function App() {
           <h2 className="mb-12 font-display text-3xl tracking-tight md:text-5xl">
             Frequently asked questions
           </h2>
-          <div>
+          <div className="rounded-2xl bg-white px-6">
             <details className="group border-b border-border">
               <summary className="flex cursor-pointer items-center justify-between py-6 text-base font-medium transition-colors hover:text-primary">
                 Can I use Spectra with my existing stack?
@@ -256,11 +256,18 @@ function App() {
         </section>
 
         <footer className="border-t border-border">
-          <div className="mx-auto grid w-full max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-4 px-6 py-8">
+          <div className="mx-auto grid w-full max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-4 px-6 py-4">
             <p className="text-[0.625rem] md:text-xs text-muted-foreground">
               &copy; {new Date().getFullYear()} Spectra. All rights reserved.
             </p>
-            <MiniOrb sizePx={32} className="justify-self-center" />
+            <button
+              type="button"
+              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              className="justify-self-center cursor-pointer"
+              aria-label="Scroll to top"
+            >
+              <MiniOrb sizePx={32} className="justify-self-center" />
+            </button>
             <div className="flex items-center justify-end gap-4">
               <a
                 href="https://x.com"

@@ -35,7 +35,7 @@ export function LoadingTermPill() {
       >
         <span className="size-1.5 animate-pulse rounded-full bg-sky-500" />
         <span
-          className="inline-block transition-opacity duration-250 ease-out"
+          className="inline-block transition-opacity duration-250 ease-out font-mono"
           style={{ opacity: fading ? 0 : 1 }}
         >
           {terms[index]}…

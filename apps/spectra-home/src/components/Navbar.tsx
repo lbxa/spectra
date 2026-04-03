@@ -16,6 +16,10 @@ export function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const [visible, setVisible] = useState(true)
   const openRef = useRef(false)
+  const scrollToTop = () => {
+    setIsOpen(false)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
 
   useEffect(() => {
     openRef.current = isOpen
@@ -97,11 +101,22 @@ export function Navbar() {
           }}
         >
           <div className="flex h-14 items-center justify-between px-4">
-            <MiniOrb sizePx={32} className="shrink-0" excited={isOpen} />
+            <button
+              type="button"
+              onClick={scrollToTop}
+              aria-label="Scroll to top"
+              className="shrink-0 cursor-pointer"
+            >
+              <MiniOrb sizePx={32} className="shrink-0" excited={isOpen} />
+            </button>
 
-            <span className="text-3xl font-display tracking-tight select-none">
+            <button
+              type="button"
+              onClick={scrollToTop}
+              className="cursor-pointer text-3xl font-display tracking-tight select-none"
+            >
               Spectra
-            </span>
+            </button>
 
             <button
               onClick={() => setIsOpen((prev) => !prev)}
@@ -145,7 +160,7 @@ export function Navbar() {
                 }}
               >
                 <div className="grid gap-6 md:grid-cols-[1fr_1.4fr]">
-                  <div className="flex flex-col gap-1.5 pt-1">
+                  <div className="flex flex-col gap-1.5">
                     {LINKS.map((link) => (
                       <a
                         key={link.href}
@@ -176,10 +191,10 @@ export function Navbar() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-4 text-xs text-muted-foreground">
+                <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center pt-4 text-xs text-muted-foreground">
                   <span>Show don&apos;t tell</span>
-                  <span>Launching 2026</span>
-                  <span className="flex items-center gap-1.5">
+                  <span className="text-center">Launching 2026</span>
+                  <span className="flex items-center justify-self-end gap-1.5">
                     Beta
                     <span className="size-1.5 rounded-full bg-sky-500" />
                   </span>
