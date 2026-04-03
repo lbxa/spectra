@@ -31,9 +31,9 @@ export function LoadingTermPill() {
     <div className="animate-fade-up mb-5">
       <Badge
         variant="outline"
-        className="h-auto gap-2 border-gray-500/25 bg-gray-500/10 px-3.5 py-1.5 tracking-wide text-[#7acbff] backdrop-blur-sm"
+        className="h-auto gap-2 border-sky-200 bg-sky-50/80 px-3.5 py-1.5 tracking-wide text-sky-700 shadow-sm backdrop-blur-sm"
       >
-        <span className="size-1.5 animate-pulse rounded-full bg-[#0b6eea]" />
+        <span className="size-1.5 animate-pulse rounded-full bg-sky-500" />
         <span
           className="inline-block transition-opacity duration-250 ease-out"
           style={{ opacity: fading ? 0 : 1 }}

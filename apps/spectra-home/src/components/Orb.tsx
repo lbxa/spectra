@@ -96,7 +96,7 @@ export function Orb({ className, theme, particleCount }: OrbProps) {
       )}
     >
       <div className="absolute inset-0" ref={containerRef} />
-      <div className="pointer-events-none absolute inset-0 rounded-full bg-white/10 backdrop-blur-[2px]" />
+      <div className="pointer-events-none absolute inset-0 rounded-full backdrop-blur-[2px]" />
     </div>
   )
 }

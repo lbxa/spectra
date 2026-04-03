@@ -62,7 +62,7 @@
     --secondary: oklch(0.97 0 0);
     --secondary-foreground: oklch(0.205 0 0);
     --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
+    --muted-foreground: oklch(0.45 0 0);
     --accent: oklch(0.97 0 0);
     --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);
@@ -135,12 +135,56 @@
 }
 
 @keyframes fade-up {
-  from { opacity: 0; transform: translateY(24px); }
+  from { opacity: 0; transform: translateY(0); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 @utility animate-fade-up {
   animation: fade-up 0.6s ease-out both;
+}
+
+.pro-card {
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(20px) saturate(160%);
+  background:
+    radial-gradient(ellipse 80% 70% at 15% 10%, rgba(120, 140, 255, 0.45) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 50% at 85% 12%, rgba(180, 120, 255, 0.30) 0%, transparent 50%),
+    radial-gradient(ellipse 90% 70% at 50% 95%, rgba(20, 130, 255, 0.50) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 60% at 5% 75%, rgba(100, 60, 220, 0.30) 0%, transparent 45%),
+    radial-gradient(circle at 70% 55%, rgba(0, 200, 255, 0.12) 0%, transparent 40%),
+    linear-gradient(150deg, #04204a 0%, #0a3d8c 30%, #0b5ec5 55%, #1a7aff 80%, #3d9dff 100%);
+  border: 1px solid rgba(140, 200, 255, 0.30);
+  box-shadow:
+    0 0 0 1px rgba(122, 203, 255, 0.08),
+    0 8px 40px -8px rgba(11, 110, 234, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.pro-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E") repeat;
+  opacity: 0.13;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.pro-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.03) 35%,
+    transparent 55%,
+    rgba(255, 255, 255, 0.06) 100%
+  );
+  pointer-events: none;
+  border-radius: inherit;
 }
 
 details summary .faq-icon {
