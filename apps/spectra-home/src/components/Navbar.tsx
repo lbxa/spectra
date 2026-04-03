@@ -159,7 +159,7 @@ export function Navbar() {
                     : `opacity 200ms ${EASE}`,
                 }}
               >
-                <div className="grid gap-6 md:grid-cols-[1fr_1.4fr]">
+                <div className="grid gap-6 md:grid-cols-[1fr_1.4fr] pt-2">
                   <div className="flex flex-col gap-1.5">
                     {LINKS.map((link) => (
                       <a
@@ -191,7 +191,7 @@ export function Navbar() {
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center pt-4 text-xs text-muted-foreground">
+                <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center text-xs text-muted-foreground">
                   <span>Show don&apos;t tell</span>
                   <span className="text-center">Launching 2026</span>
                   <span className="flex items-center justify-self-end gap-1.5">
