@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { execSync } from "node:child_process";
 
@@ -55,13 +55,11 @@ if (prerelease) {
 const appRoot = resolve(".");
 const releaseRoot = join(appRoot, ".release");
 const artifactsDir = join(releaseRoot, "artifacts");
-const npmRoot = join(releaseRoot, "npm");
 const distDir = join(appRoot, "dist");
 const distManifestPath = join(distDir, "manifest.json");
 
 rmSync(releaseRoot, { recursive: true, force: true });
 mkdirSync(artifactsDir, { recursive: true });
-mkdirSync(npmRoot, { recursive: true });
 
 execSync("bun run build", { stdio: "inherit" });
 
@@ -73,42 +71,6 @@ const manifest = JSON.parse(readFileSync(distManifestPath, "utf8")) as ReleaseMa
 manifest.version = manifestVersion;
 manifest.version_name = releaseVersion;
 writeFileSync(distManifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-
-cpSync(distDir, npmRoot, { recursive: true });
-
-const repositorySlug = process.env.GITHUB_REPOSITORY ?? "lbxa/spectra";
-const [repositoryOwner] = repositorySlug.split("/");
-const npmScope = repositoryOwner.toLowerCase();
-const packageName = process.env.SPECTRA_RELEASE_PACKAGE_NAME ?? `@${npmScope}/spectra-extension`;
-const packageJson = {
-  name: packageName,
-  version: releaseVersion,
-  description: "Spectra browser extension build artifact package.",
-  private: false,
-  license: "UNLICENSED",
-  repository: {
-    type: "git",
-    url: `git+https://github.com/${repositorySlug}.git`,
-  },
-  publishConfig: {
-    registry: "https://npm.pkg.github.com",
-  },
-};
-
-writeFileSync(join(npmRoot, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
-writeFileSync(
-  join(npmRoot, "README.md"),
-  [
-    "# Spectra Extension Artifact",
-    "",
-    "This package contains a built Spectra Chrome extension artifact.",
-    "",
-    `Version: ${releaseVersion}`,
-    "",
-    "Install and unpack from npm, then load as an unpacked extension in Chrome.",
-    "",
-  ].join("\n"),
-);
 
 const zipName = `spectra-extension-${releaseVersion}.zip`;
 const zipPath = join(artifactsDir, zipName);
