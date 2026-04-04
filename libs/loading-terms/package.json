@@ -1,0 +1,30 @@
+{
+  "name": "@spectra/loading-terms",
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "files": [
+    "dist",
+    "words.json"
+  ],
+  "private": true,
+  "dependencies": {
+    "@spectra/tsconfig": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "typescript": "^5.7.3"
+  }
+}

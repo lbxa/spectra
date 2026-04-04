@@ -1,0 +1,14 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "spectra",
+    // Update to today's date
+    "compatibility_date": "2025-03-25", 
+    "compatibility_flags": ["nodejs_compat"],
+    "assets": {
+      "directory": "./dist"
+    },
+    "observability": {
+      "enabled": true
+    }
+  }
+  
