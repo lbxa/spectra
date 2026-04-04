@@ -53,6 +53,7 @@ if (prerelease) {
 }
 
 const appRoot = resolve(".");
+const monorepoRoot = resolve(appRoot, "..", "..");
 const releaseRoot = join(appRoot, ".release");
 const artifactsDir = join(releaseRoot, "artifacts");
 const distDir = join(appRoot, "dist");
@@ -61,7 +62,9 @@ const distManifestPath = join(distDir, "manifest.json");
 rmSync(releaseRoot, { recursive: true, force: true });
 mkdirSync(artifactsDir, { recursive: true });
 
-execSync("bun run build", { stdio: "inherit" });
+// Build from monorepo root so workspace packages (for example @spectra/orb)
+// are built before the extension package is bundled.
+execSync("bun run build", { cwd: monorepoRoot, stdio: "inherit" });
 
 if (!existsSync(distManifestPath)) {
   throw new Error(`Build did not produce manifest at "${distManifestPath}"`);
