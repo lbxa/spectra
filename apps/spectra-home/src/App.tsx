@@ -17,7 +17,7 @@ function App() {
             <MiniOrb sizePx={800} className="hidden lg:block" />
           </div>
         </div>
-        <div className="pointer-events-none absolute inset-0 bg-white/70" />
+        <div className="pointer-events-none absolute inset-0 bg-black/10" />
       </div>
 
       <Navbar />
@@ -260,7 +260,7 @@ function App() {
                 Spectra is designed to complement your workflow, not replace everything. It is ideal when you need to show how something works — animations, transitions, interactive states — rather than how it looks statically. Many teams use Spectra alongside Figma or Sketch.
               </p>
             </details>
-            <details className="group border-b border-border">
+            <details className="group">
               <summary className="flex cursor-pointer items-center justify-between py-6 text-base font-medium transition-colors hover:text-primary">
                 Is Spectra open source?
                 <span className="faq-icon ml-4 flex size-7 shrink-0 items-center justify-center rounded-lg border border-border text-lg text-muted-foreground">+</span>
@@ -285,10 +285,13 @@ function App() {
             <button
               type="button"
               onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-              className="justify-self-center cursor-pointer"
+              className="flex items-center gap-2 justify-self-center cursor-pointer"
               aria-label="Scroll to top"
             >
-              <MiniOrb sizePx={32} className="justify-self-center" />
+              <MiniOrb sizePx={32} className="shrink-0" />
+              <span className="text-xl font-sans font-semibold tracking-tighter text-neutral-200 select-none">
+                Spectra
+              </span>
             </button>
             <div className="flex items-center justify-end gap-4">
               <a
