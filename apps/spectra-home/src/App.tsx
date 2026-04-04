@@ -7,7 +7,7 @@ import chromeLogo from "@/assets/chrome.svg"
 
 function App() {
   return (
-    <div className="relative min-h-screen bg-transparent text-foreground">
+    <div className="relative min-h-screen overflow-x-clip bg-transparent text-foreground">
       <div className="fixed inset-0 z-0 overflow-hidden">
         <div className="flex h-full items-center justify-center">
           <div className="opacity-90">
@@ -279,8 +279,9 @@ function App() {
             </blockquote>
           </div>
           <div className="mx-auto grid w-full max-w-6xl grid-cols-[1fr_auto_1fr] items-center gap-4 px-6 py-4">
-            <p className="text-[0.55rem] md:text-[0.65rem] text-neutral-200">
-              &copy; {new Date().getFullYear()} Spectra. All rights reserved.
+            <p className="text-[0.55rem] text-neutral-200 md:text-[0.65rem]">
+              <span className="block md:inline">&copy; {new Date().getFullYear()} Spectra.</span>
+              <span className="block md:ml-1 md:inline">All rights reserved.</span>
             </p>
             <button
               type="button"
