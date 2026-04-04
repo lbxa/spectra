@@ -27,24 +27,27 @@ export function Navbar() {
 
   useEffect(() => {
     let prevY = window.scrollY
-    let vel = 0
     let ticking = false
 
     const update = () => {
       const y = window.scrollY
       const delta = y - prevY
+      const absDelta = Math.abs(delta)
 
-      vel = vel * 0.7 + delta * 0.3
+      // Ignore mobile viewport jitter from browser chrome changes.
+      if (absDelta < 8) {
+        prevY = y
+        ticking = false
+        return
+      }
 
-      if (Math.abs(delta) >= 1) {
-        if (y < 100) {
-          setVisible(true)
-        } else if (vel > 2) {
-          if (openRef.current) setIsOpen(false)
-          setVisible(false)
-        } else if (vel < -4) {
-          setVisible(true)
-        }
+      if (y < 100) {
+        setVisible(true)
+      } else if (delta > 0) {
+        if (openRef.current) setIsOpen(false)
+        setVisible(false)
+      } else {
+        setVisible(true)
       }
 
       prevY = y

@@ -3,18 +3,19 @@
   "version": "1.0.0",
   "license": "UNLICENSED",
   "private": true,
-  "main": "./dist/index.js",
+  "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
-    }
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./style.css": "./dist/index.css"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc && mkdir -p dist/lib/MiniOrb && cp src/lib/MiniOrb/*.css dist/lib/MiniOrb/",
+    "build": "vite build && tsc -b --force --emitDeclarationOnly",
     "dev": "tsc --watch"
   },
   "dependencies": {
@@ -26,6 +27,7 @@
     "@types/node": "^22.7.5",
     "@types/react": "^19.2.4",
     "@types/three": "^0.183.1",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vite": "^8.0.0"
   }
 }
