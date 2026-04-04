@@ -33,9 +33,5 @@
     "@turbo/gen": "^2.9.3",
     "@types/node": "^25.5.0",
     "turbo": "^2.9.3"
-  },
-  "dependencies": {
-    "@fontsource-variable/dm-sans": "^5.2.8",
-    "@fontsource/instrument-serif": "^5.2.8"
   }
 }

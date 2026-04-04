@@ -23,7 +23,9 @@ export default {
         { type: "build", release: false },
       ],
     }],
-    "@semantic-release/release-notes-generator",
+    ["@semantic-release/release-notes-generator", {
+      preset: "conventionalcommits",
+    }],
     ["@semantic-release/exec", {
       verifyConditionsCmd: "bun scripts/release/bootstrap-npm-pkg-root.ts",
       prepareCmd: "bun scripts/release/prepare-release.ts ${nextRelease.version} ${branch.name}",
